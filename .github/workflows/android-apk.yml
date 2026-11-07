@@ -39,7 +39,7 @@ jobs:
         working-directory: android
         run: |
           chmod +x gradlew
-          ./gradlew --no-daemon assembleRelease
+          ./gradlew --no-daemon assembleRelease -Pandroid.enableMinifyInReleaseBuilds=false
 
       - name: Rename APK
         run: |
