@@ -1,25 +1,16 @@
 {
   "expo": {
-    "name": "socialplus",
-    "slug": "socialplus",
+    "name": "SocialPlus",
+    "slug": "socialplus-full",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/icon.png",
-    "userInterfaceStyle": "light",
-    "ios": {
-      "supportsTablet": true
-    },
-    "android": {
-      "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
-        "foregroundImage": "./assets/android-icon-foreground.png",
-        "backgroundImage": "./assets/android-icon-background.png",
-        "monochromeImage": "./assets/android-icon-monochrome.png"
-      },
-      "predictiveBackGestureEnabled": false
-    },
-    "web": {
-      "favicon": "./assets/favicon.png"
-    }
+    "userInterfaceStyle": "dark",
+    "backgroundColor": "#0D0E15",
+    "scheme": "socialplus",
+    "splash": { "backgroundColor": "#0D0E15", "resizeMode": "contain" },
+    "ios": { "supportsTablet": true, "bundleIdentifier": "com.socialplus.app", "infoPlist": { "NSCameraUsageDescription": "نحتاج الكاميرا للبث والقصص والمكالمات", "NSMicrophoneUsageDescription": "نحتاج الميكروفون للمكالمات والبث" } },
+    "android": { "package": "com.socialplus.app", "adaptiveIcon": { "backgroundColor": "#0D0E15" } },
+    "plugins": ["expo-av", "expo-image-picker"],
+    "extra": { "eas": { "projectId": "00000000-0000-0000-0000-000000000000" } }
   }
 }
