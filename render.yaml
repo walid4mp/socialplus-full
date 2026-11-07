@@ -3,7 +3,7 @@ services:
   - type: web
     name: socialplus-full
     runtime: static
-    buildCommand: npm ci && npx expo export --platform web
+    buildCommand: npm ci --include=dev buildCommand: npm ci && npx expo export --platform webbuildCommand: npm ci && npx expo export --platform web npx expo export --platform web
     outputDir: dist
     envVars:
       - key: EXPO_PUBLIC_SUPABASE_URL
