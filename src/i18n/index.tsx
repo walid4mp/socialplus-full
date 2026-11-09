@@ -1,6 +1,7 @@
 import React, { createContext, useContext } from "react";
 import { I18nManager } from "react-native";
 import { useAppStore } from "../store/useAppStore";
+import { applyRTL, type Lang } from "./rtl";
 
 const dict = {
   ar: {
@@ -67,7 +68,7 @@ const dict = {
   },
 } as const;
 
-export type Lang = keyof typeof dict;
+export type { Lang } from "./rtl";
 export type TKey = keyof typeof dict["ar"];
 
 const Ctx = createContext<{ t: (k: TKey) => string; lang: Lang; isRTL: boolean; setLang: (l: Lang) => void }>({
@@ -84,6 +85,3 @@ export function I18nProvider({ children }: { children: React.ReactNode }) {
 }
 
 export const useI18n = () => useContext(Ctx);
-export function applyRTL(l: Lang) {
-  I18nManager.allowRTL(l === "ar");
-}

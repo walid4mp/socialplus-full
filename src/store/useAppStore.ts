@@ -1,7 +1,7 @@
 import { create } from "zustand";
 import { supabase } from "../lib/supabase";
 import type { Profile } from "../lib/database.types";
-import { applyRTL, type Lang } from "../i18n/";
+import { applyRTL, type Lang } from "../i18n/rtl";
 
 export type Session = Awaited<ReturnType<typeof supabase.auth.getSession>>["data"]["session"];
 

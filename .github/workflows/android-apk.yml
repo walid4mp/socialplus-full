@@ -44,7 +44,8 @@ jobs:
       - name: Rename APK
         run: |
           mkdir -p out
-          cp android/app/build/outputs/apk/release/app-release.apk out/SocialPlus-v1.0.0.apk
+          VER=$(node -p "require('./app.json').expo.version")
+          cp android/app/build/outputs/apk/release/app-release.apk out/SocialPlus-v$VER.apk
           ls -lh out
 
       - name: Verify APK signature
@@ -71,5 +72,5 @@ jobs:
             حمّل الملف **SocialPlus-v1.0.0.apk** مباشرة (بدون ضغط ZIP).
             - تثبيت مباشر: اسمح بـ "مصادر غير معروفة" ثم افتح الملف
             - يتطلب Android 7.0 (API 24) أو أحدث
-          files: out/SocialPlus-v1.0.0.apk
+          files: out/SocialPlus-v*.apk
           makeLatest: true

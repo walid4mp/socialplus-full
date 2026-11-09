@@ -1,5 +1,6 @@
 import React, { useEffect } from "react";
 import { View, Text } from "react-native";
+import * as ExpoSplashScreen from "expo-splash-screen";
 import { StatusBar } from "expo-status-bar";
 import { LinearGradient } from "react-native-linear-gradient";
 import Animated, { FadeInDown, FadeInUp, withDelay, withTiming, useSharedValue, withSpring, Easing } from "react-native-reanimated";
@@ -14,7 +15,10 @@ export function SplashScreen({ navigation }: NativeStackScreenProps<RootParams, 
   const glow = useSharedValue(0.4);
   useEffect(() => {
     glow.value = withDelay(200, withTiming(1, { duration: 1200, easing: Easing.inOut(Easing.ease) }));
-    const id = setTimeout(() => navigation.replace("Onboarding"), 2200);
+    const id = setTimeout(() => {
+      ExpoSplashScreen.hideAsync().catch(() => {});
+      navigation.replace("Onboarding");
+    }, 2200);
     return () => clearTimeout(id);
   }, [navigation, glow]);
 
