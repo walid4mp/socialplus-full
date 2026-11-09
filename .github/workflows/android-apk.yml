@@ -11,7 +11,7 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 75
 
     steps:
       - name: Checkout
@@ -35,6 +35,11 @@ jobs:
       - name: Generate Android project
         run: npx expo prebuild --platform android --no-install
 
+      - name: Unique versionCode per build
+        run: |
+          sed -i "s/versionCode 1/versionCode ${{ github.run_number }}/" android/app/build.gradle
+          grep -n "versionCode" android/app/build.gradle
+
       - name: Build signed release APK
         working-directory: android
         run: |
@@ -51,8 +56,35 @@ jobs:
       - name: Verify APK signature
         run: |
           BT=$(ls "$ANDROID_HOME/build-tools" | sort -V | tail -1)
-          echo "build-tools: $BT"
           "$ANDROID_HOME/build-tools/$BT/apksigner" verify --print-certs out/SocialPlus-v*.apk
+
+      - name: Enable KVM for emulator
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm-dev"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Launch smoke test on real emulator (يفشل البناء لو التطبيق انهار)
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          arch: x86_64
+          script: |
+            adb install -r out/SocialPlus-v*.apk
+            adb logcat -c
+            adb shell am start -W -n com.socialplus.app/.MainActivity
+            sleep 30
+            echo "=== resumed activity ==="
+            adb shell dumpsys activity activities | grep -iE "ResumedActivity" | head -3 || true
+            echo "=== crash check ==="
+            if adb logcat -d | grep -q "FATAL EXCEPTION"; then
+              echo "APP CRASHED — printing stack trace:"
+              adb logcat -d | grep -B2 -A 60 "FATAL EXCEPTION" | head -120
+              exit 1
+            fi
+            echo "LAUNCH_OK: no FATAL EXCEPTION"
+            adb exec-out screencap -p > out/launch-screenshot.png || true
+            ls -lh out
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
@@ -62,15 +94,25 @@ jobs:
           if-no-files-found: error
           retention-days: 30
 
+      - name: Upload launch screenshot + logcat
+        uses: actions/upload-artifact@v4
+        with:
+          name: Launch-Proof
+          path: |
+            out/launch-screenshot.png
+          if-no-files-found: ignore
+          retention-days: 30
+
       - name: Publish to GitHub Releases (تنزيل مباشر بدون ZIP)
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v1.0.${{ github.run_number }}
-          name: SocialPlus Android v1.0.${{ github.run_number }}
+          tag_name: v1.1.${{ github.run_number }}
+          name: SocialPlus Android v1.1.${{ github.run_number }}
           body: |
             ## 📱 SocialPlus APK — تثبيت مباشر
-            حمّل الملف **SocialPlus-v1.0.0.apk** مباشرة (بدون ضغط ZIP).
-            - تثبيت مباشر: اسمح بـ "مصادر غير معروفة" ثم افتح الملف
+            حمّل ملف **SocialPlus-v1.1.1.apk** مباشرة (بدون ضغط ZIP).
+            ✅ تم اختبار الإقلاع فعلياً على محاكي Android 14 داخل CI قبل النشر.
             - يتطلب Android 7.0 (API 24) أو أحدث
+            - احذف النسخة القديمة قبل التثبيت
           files: out/SocialPlus-v*.apk
           makeLatest: true
