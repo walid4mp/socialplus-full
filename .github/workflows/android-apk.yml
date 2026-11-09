@@ -52,7 +52,7 @@ jobs:
         run: |
           BT=$(ls "$ANDROID_HOME/build-tools" | sort -V | tail -1)
           echo "build-tools: $BT"
-          "$ANDROID_HOME/build-tools/$BT/apksigner" verify --print-certs out/SocialPlus-v1.0.0.apk
+          "$ANDROID_HOME/build-tools/$BT/apksigner" verify --print-certs out/SocialPlus-v*.apk
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
