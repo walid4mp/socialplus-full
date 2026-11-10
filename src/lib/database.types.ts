@@ -13,6 +13,10 @@ export interface Profile {
   is_admin: boolean;
   is_banned: boolean;
   coins: number;
+  is_private: boolean;
+  allow_messages: "everyone" | "following" | "nobody";
+  show_online: boolean;
+  show_last_seen: boolean;
   created_at: string;
 }
 
@@ -116,7 +120,22 @@ export interface Stream {
 export interface Follow {
   follower_id: string;
   following_id: string;
+  status: "accepted" | "pending";
   created_at: string;
+}
+
+export interface LiveMessage {
+  id: string;
+  stream_id: string;
+  user_id: string;
+  content: string;
+  created_at: string;
+  profiles?: Profile;
+}
+
+export interface StreamExtended extends Stream {
+  ended_at: string | null;
+  peak_viewers: number;
 }
 
 export interface Report {

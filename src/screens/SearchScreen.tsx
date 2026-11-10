@@ -13,6 +13,27 @@ const trending = [
   { tag: "#Technology", n: "742K منشور" },
 ];
 
+function FollowBtn({ targetId, targetName }: { targetId: string; targetName: string }) {
+  const { t } = useI18n();
+  const [state, setState] = useState<"none" | "pending" | "following">("none");
+  const go = async () => {
+    if (state === "following") {
+      await supabase.rpc("unfollow_user", { p_target: targetId });
+      setState("none");
+    } else {
+      const { data } = await supabase.rpc("follow_user", { p_target: targetId });
+      setState(data === "pending" ? "pending" : "following");
+    }
+  };
+  return (
+    <Pressable onPress={go} style={{ borderRadius: 999, borderWidth: 1, borderColor: colors.accent, paddingHorizontal: 14, paddingVertical: 5 }}>
+      <Text style={{ color: colors.accent, fontSize: 12, fontWeight: "700" }}>
+        {state === "following" ? t("following2") : state === "pending" ? "⏳" : t("follow")}
+      </Text>
+    </Pressable>
+  );
+}
+
 export function SearchScreen() {
   const { t } = useI18n();
   const [q, setQ] = useState("");
@@ -43,10 +64,11 @@ export function SearchScreen() {
       {tab !== "tags" && users.map((u) => (
         <View key={u.id} style={{ flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 8 }}>
           <Avatar uri={u.avatar_url} size={44} />
-          <View>
+          <View style={{ flex: 1 }}>
             <Text style={{ color: "#fff", fontWeight: "700" }}>{u.full_name ?? u.username} {u.is_verified ? <Text style={{ color: colors.accent }}>✔︎</Text> : null}</Text>
             <Text style={{ color: colors.muted, fontSize: 12 }}>@{u.username}</Text>
           </View>
+          <FollowBtn targetId={u.id} targetName={u.username} />
         </View>
       ))}
       {tab !== "users" && (

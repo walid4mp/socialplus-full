@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
-import { View, Text, FlatList, Pressable, TextInput } from "react-native";
+import { View, Text, FlatList, Pressable, TextInput, Modal } from "react-native";
+import { useAppStore } from "../store/useAppStore";
 import { supabase } from "../lib/supabase";
 import { Avatar, GlassCard, Input, s } from "../components/ui";
 import { useI18n } from "../i18n";
@@ -14,9 +15,21 @@ export function ChatsScreen({ navigation }: any) {
   const [q, setQ] = useState("");
   const [chats, setChats] = useState<(Conversation & { unread?: number })[]>([]);
 
-  useEffect(() => {
-    supabase.from("conversations").select("*").order("updated_at", { ascending: false }).then(({ data }) => setChats((data as any) ?? []));
-  }, []);
+  const [groupOpen, setGroupOpen] = React.useState(false);
+  const [groupName, setGroupName] = React.useState("");
+
+  const load = () => supabase.from("conversations").select("*").order("updated_at", { ascending: false }).then(({ data }) => setChats((data as any) ?? []));
+  useEffect(() => { load(); }, []);
+
+  const createGroup = async () => {
+    const me = useAppStore.getState().profile;
+    if (!me || !groupName.trim()) return;
+    const { data: conv } = await supabase.from("conversations").insert({ is_group: true, title: groupName.trim() }).select().single();
+    await supabase.from("conversation_members").insert({ conversation_id: conv.id, user_id: me.id });
+    setGroupName(""); setGroupOpen(false);
+    load();
+    navigation.navigate("ChatRoom", { conversationId: conv.id, title: groupName.trim() });
+  };
 
   const seed = [
     { id: "s1", name: "Sara Mohammed", msg: "أرسلت لك صورة ✨", time: "9:40", unread: 2 },
@@ -33,7 +46,24 @@ export function ChatsScreen({ navigation }: any) {
 
   return (
     <View style={[s.screen, { paddingTop: 54, paddingHorizontal: 14 }]}>
-      <Text style={{ color: "#fff", fontSize: 24, fontWeight: "900", marginBottom: 12 }}>{t("chats")}</Text>
+      <View style={{ flexDirection: "row", alignItems: "center", marginBottom: 12 }}>
+        <Text style={{ color: "#fff", fontSize: 24, fontWeight: "900", flex: 1 }}>{t("chats")}</Text>
+        <Pressable onPress={() => setGroupOpen(true)} style={{ backgroundColor: colors.primary, borderRadius: 999, paddingHorizontal: 14, paddingVertical: 8 }}>
+          <Text style={{ color: "#fff", fontWeight: "800", fontSize: 13 }}>＋ مجموعة</Text>
+        </Pressable>
+      </View>
+      <Modal visible={groupOpen} transparent animationType="fade">
+        <View style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.7)", alignItems: "center", justifyContent: "center", padding: 30 }}>
+          <View style={{ backgroundColor: colors.surface, borderRadius: 20, padding: 20, alignSelf: "stretch", gap: 12 }}>
+            <Text style={{ color: "#fff", fontWeight: "800" }}>اسم المجموعة</Text>
+            <TextInput value={groupName} onChangeText={setGroupName} placeholder="مثال: الأصدقاء" placeholderTextColor={colors.muted} style={{ backgroundColor: colors.surface2, borderRadius: 12, height: 46, paddingHorizontal: 12, color: "#fff" }} />
+            <View style={{ flexDirection: "row", gap: 10 }}>
+              <Pressable onPress={() => setGroupOpen(false)} style={{ flex: 1, padding: 12, borderRadius: 12, backgroundColor: colors.surface2, alignItems: "center" }}><Text style={{ color: "#fff" }}>إلغاء</Text></Pressable>
+              <Pressable onPress={createGroup} style={{ flex: 1, padding: 12, borderRadius: 12, backgroundColor: colors.primary, alignItems: "center" }}><Text style={{ color: "#fff", fontWeight: "700" }}>إنشاء</Text></Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
       <Input icon="🔍" placeholder={t("searchPlaceholder")} value={q} onChangeText={setQ} />
       <View style={{ flexDirection: "row", gap: 8, marginVertical: 12 }}>
         {([["all", t("all")], ["unread", t("unread")], ["groups", t("groups")]] as const).map(([k, l]) => (

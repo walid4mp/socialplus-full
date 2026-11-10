@@ -34,9 +34,14 @@ export function HomeScreen({ navigation }: any) {
     load();
   }, []);
 
-  const toggleLike = (p: Post) => {
+  const toggleLike = async (p: Post) => {
     setLiked((m) => ({ ...m, [p.id]: !m[p.id] }));
-    supabase.rpc("toggle_post_like", { p_post_id: p.id }).then(() => load());
+    await supabase.rpc("toggle_post_like", { p_post_id: p.id });
+    const me = useAppStore.getState().profile;
+    if (!liked[p.id] && me && p.user_id !== me.id) {
+      supabase.from("notifications").insert({ user_id: p.user_id, actor_id: me.id, kind: "like", entity_id: p.id }).then(() => {});
+    }
+    load();
   };
 
   return (
@@ -93,7 +98,7 @@ export function HomeScreen({ navigation }: any) {
                     </Text>
                     <Text style={{ color: colors.muted, fontSize: 12 }}>@{p?.username ?? "user"}</Text>
                   </View>
-                  <Pressable onPress={() => Alert.alert(t("follow"), `@${p?.username}`)}>
+                  <Pressable onPress={async () => { const me = useAppStore.getState().profile; if (me && item.user_id !== me.id) { await supabase.rpc("follow_user", { p_target: item.user_id }); Alert.alert(t("follow"), `@${p?.username}`); } }}>
                     <Text style={{ color: colors.accent, fontWeight: "700" }}>{t("follow")}</Text>
                   </Pressable>
                 </View>
