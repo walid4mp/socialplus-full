@@ -40,6 +40,9 @@ jobs:
           sed -i "s/versionCode 1/versionCode ${{ github.run_number }}/" android/app/build.gradle
           grep -n "versionCode" android/app/build.gradle
 
+      - name: Pre-install NDK (يمنع فشل تثبيت NDK داخل Gradle)
+        run: yes | sdkmanager --install "ndk;27.1.12297006" > /dev/null
+
       - name: Build signed release APK
         working-directory: android
         run: |
