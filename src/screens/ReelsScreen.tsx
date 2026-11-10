@@ -66,7 +66,7 @@ export function ReelsScreen() {
         )}
         ListEmptyComponent={<Empty text="لا توجد ريلز بعد 🎬" />}
       />
-      <Pressable onPress={upload} disabled={uploading} style={{ position: "absolute", bottom: 90, insetInlineEnd: 18, backgroundColor: colors.primary, borderRadius: 999, paddingHorizontal: 18, paddingVertical: 12 }}>
+      <Pressable onPress={upload} disabled={uploading} style={{ position: "absolute", bottom: 84, insetInlineStart: 18, backgroundColor: colors.primary, borderRadius: 999, paddingHorizontal: 18, paddingVertical: 12, shadowColor: "#000", shadowOpacity: 0.4, shadowRadius: 8, shadowOffset: { width: 0, height: 4 } }}>
         <Text style={{ color: "#fff", fontWeight: "800" }}>{uploading ? "…جارٍ الرفع" : "＋ ريل جديد"}</Text>
       </Pressable>
     </View>
@@ -91,7 +91,7 @@ function ReelItem({ reel, active, onLike, onDelete, isMine }: any) {
           <Text style={{ fontSize: 60 }}>🎥</Text>
         </LinearGradient>
       )}
-      <View style={{ position: "absolute", bottom: 110, insetInlineEnd: 14, gap: 20, alignItems: "center" }}>
+      <View style={{ position: "absolute", bottom: 100, insetInlineEnd: 14, gap: 20, alignItems: "center" }}>
         <Pressable onPress={() => onLike(reel)}><Text style={{ fontSize: 26 }}>❤️</Text><Text style={{ color: "#fff", fontSize: 11, textAlign: "center" }}>{reel.like_count}</Text></Pressable>
         <Pressable><Text style={{ fontSize: 26 }}>💬</Text><Text style={{ color: "#fff", fontSize: 11, textAlign: "center" }}>{reel.comment_count}</Text></Pressable>
         <Pressable><Text style={{ fontSize: 26 }}>↗️</Text><Text style={{ color: "#fff", fontSize: 11, textAlign: "center" }}>{reel.share_count}</Text></Pressable>

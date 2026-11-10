@@ -1,7 +1,7 @@
 import React from "react";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
-import { Text, Pressable } from "react-native";
+import { Text, Pressable, View, StyleSheet } from "react-native";
 import { colors } from "../theme";
 import { useI18n } from "../i18n";
 import {
@@ -16,7 +16,6 @@ function ChatsStack() {
   return (
     <Stack.Navigator screenOptions={{ headerShown: false }}>
       <Stack.Screen name="ChatsList" component={ChatsScreen} />
-      <Stack.Screen name="SettingsFromChats" component={SettingsScreen} />
     </Stack.Navigator>
   );
 }
@@ -30,50 +29,105 @@ function ProfileStack() {
   );
 }
 
-function Icon({ glyph, active }: { glyph: string; active: boolean }) {
+/* أيقونة SVG-free موحدة: دائرة خلفية + إيموجي، حجم موحد 26 */
+function TabIcon({ glyph, focused, badge }: { glyph: string; focused: boolean; badge?: number }) {
   return (
-    <Text style={{ fontSize: 24, opacity: active ? 1 : 0.55, shadowColor: colors.accent, shadowOpacity: active ? 0.8 : 0 }}>
-      {glyph}
-    </Text>
+    <View style={styles.iconWrap}>
+      <View style={[styles.iconBubble, focused && { backgroundColor: "rgba(91,103,241,0.18)" }]}>
+        <Text style={{ fontSize: 22, opacity: focused ? 1 : 0.6 }}>{glyph}</Text>
+      </View>
+      {!!badge && badge > 0 && (
+        <View style={styles.badge}>
+          <Text style={styles.badgeText}>{badge > 9 ? "9+" : badge}</Text>
+        </View>
+      )}
+    </View>
   );
 }
 
 export function MainTabs() {
-  const { t, isRTL } = useI18n();
+  const { t, lang } = useI18n();
+  /* تسميات قصيرة لا تُقتطع في أي لغة */
+  const labels = {
+    home: lang === "ar" ? "الرئيسية" : "Home",
+    reels: lang === "ar" ? "ريلز" : "Reels",
+    chats: lang === "ar" ? "دردشة" : "Chat",
+    profile: lang === "ar" ? "حسابي" : "Me",
+  };
+
   return (
     <Tab.Navigator
       screenOptions={{
         headerShown: false,
+        tabBarHideOnKeyboard: true,
         tabBarStyle: {
-          backgroundColor: "rgba(20,22,34,0.95)",
-          borderTopColor: "rgba(139,92,246,0.2)",
-          height: 62, paddingBottom: 8, paddingTop: 6,
+          position: "absolute",
+          backgroundColor: "rgba(13,14,21,0.97)",
+          borderTopColor: "rgba(139,92,246,0.18)",
+          height: 64,
+          paddingTop: 6,
+          paddingBottom: 10,
         },
         tabBarActiveTintColor: colors.accent,
         tabBarInactiveTintColor: colors.muted,
-        tabBarLabelStyle: { fontSize: 11, fontWeight: "600" },
+        tabBarLabelStyle: { fontSize: 11, fontWeight: "700" },
+        tabBarItemStyle: { paddingVertical: 0, marginHorizontal: 2 },
       }}
     >
-      <Tab.Screen name="Home" component={HomeScreen} options={{ title: t("home"), tabBarIcon: ({ focused }) => <Icon glyph="🏠" active={focused} /> }} />
-      <Tab.Screen name="Reels" component={ReelsScreen} options={{ title: t("reels"), tabBarIcon: ({ focused }) => <Icon glyph="🎬" active={focused} /> }} />
+      <Tab.Screen
+        name="Home"
+        component={HomeScreen}
+        options={{ title: labels.home, tabBarIcon: ({ focused }) => <TabIcon glyph="🏠" focused={focused} /> }}
+      />
+      <Tab.Screen
+        name="Reels"
+        component={ReelsScreen}
+        options={{ title: labels.reels, tabBarIcon: ({ focused }) => <TabIcon glyph="🎬" focused={focused} /> }}
+      />
       <Tab.Screen
         name="Create"
         component={CreatePostScreen}
         options={{
-          title: t("create"),
+          title: "",
           tabBarIcon: () => (
-            <Pressable>
-              <Text style={{ fontSize: 26, width: 52, height: 34, textAlign: "center", textAlignVertical: "center", color: "#fff", backgroundColor: colors.primary, borderRadius: 12 }}>＋</Text>
-            </Pressable>
+            <View style={styles.createBtn}>
+              <Text style={{ color: "#fff", fontSize: 26, fontWeight: "300", marginTop: -3 }}>＋</Text>
+            </View>
           ),
         }}
       />
-      <Tab.Screen name="Search" component={SearchScreen} options={{ title: t("search"), tabBarIcon: ({ focused }) => <Icon glyph="🔍" active={focused} /> }} />
-      <Tab.Screen name="Chats" component={ChatsStack} options={{ title: t("chats"), tabBarIcon: ({ focused }) => <Icon glyph="💬" active={focused} /> }} />
-      <Tab.Screen name="Profile" component={ProfileStack} options={{ title: t("profile"), tabBarIcon: ({ focused }) => <Icon glyph="👤" active={focused} /> }} />
+      <Tab.Screen
+        name="Chats"
+        component={ChatsStack}
+        options={{ title: labels.chats, tabBarIcon: ({ focused }) => <TabIcon glyph="💬" focused={focused} /> }}
+      />
+      <Tab.Screen
+        name="Profile"
+        component={ProfileStack}
+        options={{ title: labels.profile, tabBarIcon: ({ focused }) => <TabIcon glyph="👤" focused={focused} /> }}
+      />
+      {/* شاشات مخفية من الشريط — تُفتح بالتنقل */}
+      <Tab.Screen name="Search" component={SearchScreen} options={{ tabBarButton: () => null }} />
       <Tab.Screen name="Notifications" component={NotificationsScreen} options={{ tabBarButton: () => null }} />
       <Tab.Screen name="Settings" component={SettingsScreen} options={{ tabBarButton: () => null }} />
       <Tab.Screen name="Stories" component={StoriesScreen} options={{ tabBarButton: () => null }} />
     </Tab.Navigator>
   );
 }
+
+const styles = StyleSheet.create({
+  iconWrap: { alignItems: "center", justifyContent: "center" },
+  iconBubble: { width: 38, height: 30, borderRadius: 10, alignItems: "center", justifyContent: "center" },
+  badge: {
+    position: "absolute", top: -3, insetInlineEnd: -6,
+    backgroundColor: colors.danger, borderRadius: 8, minWidth: 16, height: 16,
+    alignItems: "center", justifyContent: "center", paddingHorizontal: 4,
+  },
+  badgeText: { color: "#fff", fontSize: 9, fontWeight: "900" },
+  createBtn: {
+    width: 52, height: 36, borderRadius: 13,
+    backgroundColor: colors.primary,
+    alignItems: "center", justifyContent: "center",
+    shadowColor: colors.primary, shadowOpacity: 0.5, shadowRadius: 10, shadowOffset: { width: 0, height: 4 },
+  },
+});

@@ -9,6 +9,7 @@ import { I18nProvider } from "./src/i18n";
 import { RootNavigator } from "./src/navigation/RootNavigator";
 import { useAppStore } from "./src/store/useAppStore";
 import { supabase } from "./src/lib/supabase";
+import { registerPush } from "./src/lib/notifications";
 
 SplashScreen.preventAutoHideAsync().catch(() => {});
 
@@ -52,6 +53,11 @@ function AuthBridge() {
   useEffect(() => {
     if (hydrated) SplashScreen.hideAsync().catch(() => {});
   }, [hydrated]);
+
+  const session = useAppStore((s) => s.session);
+  useEffect(() => {
+    if (session?.user?.id) registerPush(session.user.id);
+  }, [session?.user?.id]);
 
   if (!hydrated) return null;
   return <RootNavigator />;

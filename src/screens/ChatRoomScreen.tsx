@@ -7,6 +7,7 @@ import { useI18n } from "../i18n";
 import { colors } from "../theme";
 import type { Message, Profile } from "../lib/database.types";
 import { useAudioRecorder, useAudioPlayer, AudioModule } from "expo-audio";
+import type { Gift } from "../lib/database.types";
 import * as ImagePicker from "expo-image-picker";
 
 export function ChatRoomScreen({ navigation }: any) {
@@ -24,10 +25,24 @@ export function ChatRoomScreen({ navigation }: any) {
   const [addOpen, setAddOpen] = useState(false);
   const [addUser, setAddUser] = useState("");
   const [recording, setRecording] = useState(false);
+  const [gifts, setGifts] = useState<Gift[]>([]);
+  const [giftOpen, setGiftOpen] = useState(false);
   const recorder = useAudioRecorder({ extension: "m4a", sampleRate: 44100, numberOfChannels: 1, bitRate: 128000, output: "mp4" } as any);
   const listRef = useRef<FlatList>(null);
 
-  useEffect(() => { load(); loadMembers(); }, [conversationId]);
+  useEffect(() => { load(); loadMembers(); supabase.from("gifts").select("*").order("price").then(({ data }) => setGifts((data as Gift[]) ?? [])); }, [conversationId]);
+
+  const sendGiftInChat = async (gift: Gift) => {
+    if (!me || !members.length) return;
+    const other = members.find((m) => m.id !== me.id);
+    if (!other) return;
+    const { error } = await supabase.rpc("send_gift", { p_gift_id: gift.id, p_receiver: other.id, p_stream_id: null, p_qty: 1, p_idem: `chat-${conversationId}-${Date.now()}` });
+    if (error) return Alert.alert("⚠️", error.message === "insufficient coins" ? "رصيد غير كافٍ" : error.message);
+    await supabase.from("messages").insert({ conversation_id: conversationId, sender_id: me.id, content: `أرسل ${gift.icon} ${gift.name}`, kind: "gift" });
+    setGiftOpen(false);
+    useAppStore.getState().refreshProfile();
+    load();
+  };
 
   useEffect(() => {
     load();
@@ -182,6 +197,9 @@ export function ChatRoomScreen({ navigation }: any) {
 
       <View style={{ padding: 12, flexDirection: "row", gap: 8, alignItems: "center" }}>
         <Pressable onPress={attachImage}><Text style={{ fontSize: 22 }}>📎</Text></Pressable>
+        <Pressable onPress={() => setGiftOpen(true)} style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: "rgba(245,158,11,0.15)", alignItems: "center", justifyContent: "center" }}>
+          <Text style={{ fontSize: 16 }}>🎁</Text>
+        </Pressable>
         <Pressable onPressIn={startRec} onPressOut={stopRec} style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: recording ? colors.danger : colors.surface2, alignItems: "center", justifyContent: "center" }}>
           <Text style={{ fontSize: 16 }}>{recording ? "⏺" : "🎤"}</Text>
         </Pressable>
@@ -196,6 +214,24 @@ export function ChatRoomScreen({ navigation }: any) {
           <Text style={{ color: "#fff", fontSize: 18 }}>➤</Text>
         </Pressable>
       </View>
+
+      <Modal visible={giftOpen} transparent animationType="slide">
+        <View style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.7)", justifyContent: "flex-end" }}>
+          <View style={{ backgroundColor: colors.surface, borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 20, gap: 12 }}>
+            <Text style={{ color: "#fff", fontWeight: "900", fontSize: 18 }}>🎁 هدية — رصيدك: {me?.coins ?? 0} 🪙</Text>
+            <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 10 }}>
+              {gifts.map((g) => (
+                <Pressable key={g.id} onPress={() => sendGiftInChat(g)} style={{ width: "30%", backgroundColor: colors.surface2, borderRadius: 16, padding: 12, alignItems: "center", borderWidth: 1, borderColor: colors.border }}>
+                  <Text style={{ fontSize: 26 }}>{g.icon}</Text>
+                  <Text style={{ color: "#fff", fontSize: 12, marginTop: 4 }}>{g.name}</Text>
+                  <Text style={{ color: colors.gold, fontSize: 12, fontWeight: "700" }}>{g.price} 🪙</Text>
+                </Pressable>
+              ))}
+            </View>
+            <Pressable onPress={() => setGiftOpen(false)} style={{ alignItems: "center", padding: 10 }}><Text style={{ color: colors.muted }}>إغلاق</Text></Pressable>
+          </View>
+        </View>
+      </Modal>
 
       <Modal visible={addOpen} transparent animationType="fade">
         <View style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.7)", alignItems: "center", justifyContent: "center", padding: 30 }}>

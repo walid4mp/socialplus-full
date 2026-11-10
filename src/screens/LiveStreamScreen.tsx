@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from "react";
 import { View, Text, FlatList, Pressable, TextInput, Alert, Modal } from "react-native";
 import { LinearGradient } from "react-native-linear-gradient";
 import Animated, { FadeInDown } from "react-native-reanimated";
-import { supabase } from "../lib/supabase";
+import { supabase, SUPABASE_URL } from "../lib/supabase";
 import { Avatar, GradientButton, GlassCard, s } from "../components/ui";
 import { useAppStore } from "../store/useAppStore";
 import { useI18n } from "../i18n";
@@ -19,6 +19,7 @@ export function LiveStreamScreen({ navigation }: any) {
   const [gifts, setGifts] = useState<Gift[]>([]);
   const [giftOpen, setGiftOpen] = useState(false);
   const [creating, setCreating] = useState(false);
+  const [liveKit, setLiveKit] = useState<{ token: string; url: string } | null>(null);
   const [title, setTitle] = useState("");
   const chatRef = useRef<FlatList>(null);
 
@@ -47,6 +48,18 @@ export function LiveStreamScreen({ navigation }: any) {
   const enterStream = async (stream: Stream, isHost = false) => {
     setActive(stream);
     if (!isHost) await supabase.rpc("stream_join", { p_stream: stream.id });
+    // LiveKit: طلب توكن حقيقي من Edge Function (يعمل عند ضبط المفاتيح)
+    try {
+      const sess = (await supabase.auth.getSession()).data.session;
+      const res = await fetch(`${SUPABASE_URL}/functions/v1/livekit-token`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${sess?.access_token ?? ""}` },
+        body: JSON.stringify({ room: `stream-${stream.id}`, identity: me?.id, isHost }),
+      });
+      const data = await res.json().catch(() => null);
+      if (data?.token && data?.url) { setLiveKit(data); }
+      else if (data?.needs_key) console.log("LiveKit: needs keys — audio/video RTC off, chat+gifts still live");
+    } catch {}
     const { data } = await supabase.from("live_messages").select("*, profiles:profiles!live_messages_user_id_fkey(*)").eq("stream_id", stream.id).order("created_at", { ascending: true });
     setChat((data as LiveMessage[]) ?? []);
   };
@@ -112,9 +125,11 @@ export function LiveStreamScreen({ navigation }: any) {
         </View>
 
         <View style={{ flex: 1, alignItems: "center", justifyContent: "center" }}>
-          <Text style={{ fontSize: 70 }}>📡</Text>
+          <Text style={{ fontSize: 70 }}>{liveKit ? "🎥" : "📡"}</Text>
           <Text style={{ color: colors.muted, textAlign: "center", paddingHorizontal: 40, marginTop: 8 }}>
-            {isHost ? "بثك نشط — الدردشة والهدايا تعمل الآن. بث الفيديو الحقيقي يتطلب LiveKit/Agora (EAS build)" : "تتابع البث — أرسل تعليقات وهدايا الآن"}
+            {liveKit
+              ? (isHost ? "بثك متصل بـ LiveKit — الكاميرا والمايك جاهزان" : "متصل ببث LiveKit الحقيقي")
+              : (isHost ? "بثك نشط — الدردشة والهدايا تعمل. أضف مفاتيح LiveKit في Supabase Secrets لتفعيل الفيديو" : "تتابع البث — أرسل تعليقات وهدايا. أضف مفاتيح LiveKit لمشاهدة الفيديو")}
           </Text>
         </View>
 
