@@ -77,12 +77,9 @@ jobs:
             echo "=== resumed activity ==="
             adb shell dumpsys activity activities | grep -iE "ResumedActivity" | head -3 || true
             echo "=== crash check ==="
-            if adb logcat -d | grep -q "FATAL EXCEPTION"; then
-              echo "APP CRASHED — printing stack trace:"
-              adb logcat -d | grep -B2 -A 60 "FATAL EXCEPTION" | head -120
-              exit 1
-            fi
-            echo "LAUNCH_OK: no FATAL EXCEPTION"
+            if adb logcat -d | grep -q "FATAL EXCEPTION"; then echo "APP CRASHED:"; adb logcat -d | grep -A 60 "FATAL EXCEPTION" | head -150; exit 1; fi
+            adb shell dumpsys activity activities | grep -i "ResumedActivity" | grep -q "com.socialplus.app/.MainActivity" && echo "FOREGROUND_OK: app alive in foreground after 30s" || { echo "APP NOT IN FOREGROUND"; exit 1; }
+            echo "LAUNCH_OK"
             adb exec-out screencap -p > out/launch-screenshot.png || true
             ls -lh out
 
