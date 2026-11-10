@@ -1,0 +1,231 @@
+import 'dart:async';
+import 'dart:typed_data';
+import 'package:dio/dio.dart' as dio_pkg;
+import 'package:flutter/material.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:social_media_app/core/notifications/channels/notification_channel_setup.dart';
+import 'package:social_media_app/core/notifications/handlers/background_message_handler.dart'
+    show ensureSupabaseReady;
+import 'package:social_media_app/core/notifications/helpers/notification_app_state_helper.dart';
+import 'package:social_media_app/core/notifications/helpers/notification_avatar_builder.dart';
+import 'package:social_media_app/core/notifications/helpers/notification_id_helper.dart';
+import 'package:social_media_app/core/notifications/notification_navigator_key.dart';
+import 'package:social_media_app/core/router/app_routes.dart';
+import 'package:social_media_app/core/services/incoming_call_navigation_guard.dart';
+import 'package:social_media_app/core/supabase/supabase_provider.dart';
+import 'package:social_media_app/features/settings/repository/settings_repository.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+
+import '../../localization/app_l10n.dart';
+
+class CallNotificationDispatcher {
+  CallNotificationDispatcher._();
+  static final CallNotificationDispatcher instance =
+      CallNotificationDispatcher._();
+
+  final NotificationAvatarBuilder _avatarBuilder = NotificationAvatarBuilder();
+  final FlutterLocalNotificationsPlugin _localNotifications =
+      FlutterLocalNotificationsPlugin();
+
+  // ── Pending "Accept" from the notification button ──────────────────────
+
+  String? _pendingActionCallId;
+  String? _pendingAction;
+
+  static const String pendingActionAccept = 'accept';
+
+  void setPendingCallAction(String callId, String action) {
+    _pendingActionCallId = callId;
+    _pendingAction = action;
+  }
+
+  /// Returns (and clears) the pending action recorded for [callId], or `null`.
+  String? consumePendingCallAction(String callId) {
+    if (_pendingActionCallId != callId) return null;
+    final action = _pendingAction;
+    _pendingActionCallId = null;
+    _pendingAction = null;
+    return action;
+  }
+
+  Future<void> showIncomingCallNotification({
+    required String callId,
+    required String callerId,
+    required String callerName,
+    required String callerAvatar,
+    required String callType,
+  }) async {
+    Uint8List profileBitmap;
+    try {
+      profileBitmap = await _avatarBuilder.getAvatarBitmap(callerAvatar);
+    } catch (_) {
+      profileBitmap = await _avatarBuilder.defaultBitmap();
+    }
+
+    final subtitle =
+        callType == 'video'
+            ? AppL10n.current.incomingVideoCall
+            : AppL10n.current.incomingVoiceCall;
+    final androidDetails = AndroidNotificationDetails(
+      NotificationChannelSetup.callChannel.id,
+      NotificationChannelSetup.callChannel.name,
+      channelDescription: NotificationChannelSetup.callChannel.description,
+      importance: Importance.max,
+      priority: Priority.max,
+      category: AndroidNotificationCategory.call,
+      icon: '@drawable/ic_notification',
+      largeIcon: ByteArrayAndroidBitmap(profileBitmap),
+      fullScreenIntent: true,
+      ongoing: true,
+      autoCancel: false,
+      timeoutAfter: 60000,
+      actions: [
+        AndroidNotificationAction(
+          'decline_call',
+          AppL10n.current.decline,
+          cancelNotification: true,
+        ),
+        AndroidNotificationAction(
+          'accept_call',
+          AppL10n.current.accept,
+          cancelNotification: true,
+          showsUserInterface: true,
+        ),
+      ],
+    );
+
+    await _localNotifications.show(
+      createNotificationId(callId),
+      callerName,
+      subtitle,
+      NotificationDetails(android: androidDetails),
+      payload:
+          'call|${_field(callId)}|${_field(callerId)}|${_field(callerName)}'
+          '|${_field(callerAvatar)}|${_field(callType)}',
+    );
+  }
+
+  Future<void> cancelCallNotification(String callId) async {
+    await _localNotifications.cancel(createNotificationId(callId));
+  }
+
+  Future<void> handleIncomingCallData(Map<String, dynamic> data) async {
+    final callId = data['callId'] as String? ?? '';
+    final callerId =
+        (data['callerId'] ??
+                data['initiatorId'] ??
+                data['initiator_id'] ??
+                data['senderId'])
+            as String? ??
+        '';
+    final callerName = data['callerName'] as String? ?? 'Unknown';
+    final callerAvatar = data['callerAvatar'] as String? ?? '';
+    final callType = data['callType'] as String? ?? 'audio';
+
+    if (callerId.isNotEmpty && callerId == SupabaseProvider.idOrNull) return;
+
+    if (IncomingCallNavigationGuard.isUserBusyWithAnotherCall(callId)) {
+      if (callId.isNotEmpty) unawaited(_rejectWhileBusy(callId));
+      return;
+    }
+
+    if (!isAppInForeground()) {
+      if (!SettingsRepository.instance.callNotifications) return;
+
+      await showIncomingCallNotification(
+        callId: callId,
+        callerId: callerId,
+        callerName: callerName,
+        callerAvatar: callerAvatar,
+        callType: callType,
+      );
+    }
+
+    if (!IncomingCallNavigationGuard.claim(callId)) return;
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      navigatorKey.currentState
+          ?.pushNamed(
+            AppRoutes.incomingCallRoute,
+            arguments: {
+              'callId': callId,
+              'callerId': callerId,
+              'callerName': callerName,
+              'callerAvatar': callerAvatar,
+              'callType': callType,
+            },
+          )
+          .then((_) => IncomingCallNavigationGuard.release(callId));
+    });
+  }
+
+  Future<void> _rejectWhileBusy(String callId) async {
+    try {
+      await SupabaseProvider.client
+          .from('calls')
+          .update({'status': 'rejected'})
+          .eq('call_id', callId)
+          .eq('status', 'ringing');
+    } catch (e) {
+      debugPrint('[CallNotificationDispatcher] busy auto-reject failed: $e');
+    }
+  }
+
+  Future<void> rejectCallViaRest(String callId) async {
+    if (callId.isEmpty) return;
+
+    unawaited(cancelCallNotification(callId));
+
+    try {
+      await ensureSupabaseReady();
+      final client = Supabase.instance.client;
+
+      for (var i = 0; i < 12 && client.auth.currentSession == null; i++) {
+        await Future<void>.delayed(const Duration(milliseconds: 250));
+      }
+
+      if (client.auth.currentSession != null) {
+        await client
+            .from('calls')
+            .update({'status': 'rejected'})
+            .eq('call_id', callId);
+        return;
+      }
+    } catch (e) {
+      debugPrint(
+        '[CallNotificationDispatcher] authenticated reject failed: $e',
+      );
+    }
+
+    try {
+      final dio = dio_pkg.Dio();
+      const supabaseUrl = String.fromEnvironment(
+        'SUPABASE_URL',
+        defaultValue: '',
+      );
+      const anonKey = String.fromEnvironment(
+        'SUPABASE_ANON_KEY',
+        defaultValue: '',
+      );
+
+      if (supabaseUrl.isEmpty || anonKey.isEmpty) return;
+
+      await dio.patch(
+        '$supabaseUrl/rest/v1/calls?call_id=eq.$callId',
+        data: {'status': 'rejected'},
+        options: dio_pkg.Options(
+          headers: {
+            'apikey': anonKey,
+            'Authorization': 'Bearer $anonKey',
+            'Content-Type': 'application/json',
+            'Prefer': 'return=minimal',
+          },
+        ),
+      );
+    } catch (e) {
+      debugPrint('_rejectCallViaRest error: $e');
+    }
+  }
+
+  static String _field(String value) => value.replaceAll('|', ' ');
+}

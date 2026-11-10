@@ -1,0 +1,132 @@
+import 'package:flutter/material.dart';
+import 'package:gap/gap.dart';
+import 'package:social_media_app/core/localization/l10n_extension.dart';
+
+class AboutUsFeatureGrid extends StatelessWidget {
+  final bool isDark;
+  final Color primary;
+
+  const AboutUsFeatureGrid({
+    super.key,
+    required this.isDark,
+    required this.primary,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final features = [
+      (
+        Icons.chat_bubble_rounded,
+        context.l10n.aboutFeatChatsTitle,
+        context.l10n.aboutFeatChatsDesc,
+      ),
+      (
+        Icons.call_rounded,
+        context.l10n.aboutFeatCallsTitle,
+        context.l10n.aboutFeatCallsDesc,
+      ),
+      (
+        Icons.people_alt_rounded,
+        context.l10n.aboutFeatGroupsTitle,
+        context.l10n.aboutFeatGroupsDesc,
+      ),
+      (
+        Icons.auto_stories_rounded,
+        context.l10n.aboutFeatStoriesTitle,
+        context.l10n.aboutFeatStoriesDesc,
+      ),
+      (
+        Icons.notifications_active_rounded,
+        context.l10n.aboutFeatAlertsTitle,
+        context.l10n.aboutFeatAlertsDesc,
+      ),
+      (
+        Icons.shield_rounded,
+        context.l10n.aboutFeatPrivacyTitle,
+        context.l10n.aboutFeatPrivacyDesc,
+      ),
+    ];
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final itemWidth = (constraints.maxWidth - 12) / 2;
+
+        return Wrap(
+          spacing: 12,
+          runSpacing: 12,
+          children: List.generate(features.length, (i) {
+            final (icon, title, desc) = features[i];
+
+            return TweenAnimationBuilder<double>(
+              tween: Tween(begin: 0.0, end: 1.0),
+              duration: Duration(milliseconds: 400 + i * 60),
+              curve: Curves.easeOut,
+              builder:
+                  (context, v, child) => Opacity(
+                    opacity: v,
+                    child: Transform.translate(
+                      offset: Offset(0, 12 * (1 - v)),
+                      child: child,
+                    ),
+                  ),
+              child: SizedBox(
+                width: itemWidth,
+                child: Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color:
+                        isDark
+                            ? Colors.white.withValues(alpha: 0.04)
+                            : Colors.grey.shade50,
+                    borderRadius: BorderRadius.circular(18),
+                    border: Border.all(
+                      color:
+                          isDark
+                              ? Colors.white.withValues(alpha: 0.07)
+                              : Colors.grey.shade200,
+                      width: 0.8,
+                    ),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Container(
+                        width: 38,
+                        height: 38,
+                        decoration: BoxDecoration(
+                          color: primary.withValues(alpha: 0.10),
+                          borderRadius: BorderRadius.circular(11),
+                        ),
+                        child: Icon(icon, color: primary, size: 18),
+                      ),
+                      const Gap(10),
+                      Text(
+                        title,
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w700,
+                          color: isDark ? Colors.white : Colors.black87,
+                          letterSpacing: context.ls(-0.2),
+                        ),
+                      ),
+                      const Gap(3),
+                      Text(
+                        desc,
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: isDark ? Colors.white38 : Colors.grey.shade500,
+                          height: 1.4,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            );
+          }),
+        );
+      },
+    );
+  }
+}

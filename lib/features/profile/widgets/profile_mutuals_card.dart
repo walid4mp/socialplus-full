@@ -1,0 +1,295 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import '../../../core/router/app_routes.dart';
+import '../../group_chats/cubits/group_list_cubit/group_list_cubit.dart';
+import '../../group_chats/models/group_model.dart';
+import '../../group_chats/services/group_chat_services.dart';
+import '../models/profile_mutuals_model.dart';
+import '../utils/profile_ui_tokens.dart';
+import 'profile_avatar_stack.dart';
+import 'package:social_media_app/core/localization/l10n_extension.dart';
+import 'package:social_media_app/core/localization/app_l10n.dart';
+
+class ProfileMutualsCard extends StatelessWidget {
+  final String userId;
+  final ProfileMutualsModel mutuals;
+
+  const ProfileMutualsCard({
+    super.key,
+    required this.userId,
+    required this.mutuals,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    if (mutuals.isEmpty) return const SizedBox.shrink();
+
+    final tokens = ProfileUiTokens.of(context);
+    final hasFriends = mutuals.friendsCount > 0;
+    final hasGroups = mutuals.groupsCount > 0;
+
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.symmetric(
+        horizontal: ProfileUiTokens.screenPadding,
+      ),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: tokens.surface,
+        borderRadius: BorderRadius.circular(ProfileUiTokens.cardRadius),
+        border: Border.all(color: tokens.outline),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (hasFriends)
+            _MutualFriendsRow(userId: userId, mutuals: mutuals, tokens: tokens),
+          if (hasFriends && hasGroups)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 12),
+              child: Divider(height: 1, thickness: 0.5, color: tokens.outline),
+            ),
+          if (hasGroups) _MutualGroupsSection(mutuals: mutuals, tokens: tokens),
+        ],
+      ),
+    );
+  }
+}
+
+class _MutualFriendsRow extends StatelessWidget {
+  final String userId;
+  final ProfileMutualsModel mutuals;
+  final ProfileUiTokens tokens;
+
+  const _MutualFriendsRow({
+    required this.userId,
+    required this.mutuals,
+    required this.tokens,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final total = mutuals.friendsCount;
+    final subtitle = _buildSentence(mutuals.friends, total);
+
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: () {
+        Navigator.of(
+          context,
+          rootNavigator: true,
+        ).pushNamed(AppRoutes.friendsListViewRoute, arguments: userId);
+      },
+      child: Row(
+        children: [
+          ProfileAvatarStack(
+            imageUrls: mutuals.friends.map((f) => f.imageUrl).toList(),
+            size: 28,
+            overlap: 10,
+            ringWidth: 2,
+            ringColor: tokens.surface,
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  context.l10n.mutualFriendsCount(total),
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: tokens.onSurface,
+                    height: 1.25,
+                  ),
+                ),
+                if (subtitle.isNotEmpty) ...[
+                  const SizedBox(height: 2),
+                  Text(
+                    subtitle,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: tokens.onSurfaceVariant,
+                      height: 1.25,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  static String _buildSentence(List<ProfileMutualFriend> friends, int total) {
+    final names =
+        friends.map((f) => f.name.trim()).where((n) => n.isNotEmpty).toList();
+    if (names.isEmpty || total <= 0) return '';
+
+    if (total == 1) return AppL10n.current.isFriendsWithBoth(names[0]);
+
+    if (total == 2) {
+      final second = names.length > 1 ? names[1] : '1 other';
+      return AppL10n.current.andAreFriendsWith(names[0], second);
+    }
+
+    if (names.length < 2) {
+      final others = total - 1;
+      return AppL10n.current.andOthersAreFriends(names[0], others);
+    }
+    final others = total - 2;
+    return '${names[0]}, ${names[1]} and $others '
+        '${others == 1 ? 'other' : 'others'} are friends with both of you';
+  }
+}
+
+class _MutualGroupsSection extends StatelessWidget {
+  final ProfileMutualsModel mutuals;
+  final ProfileUiTokens tokens;
+
+  const _MutualGroupsSection({required this.mutuals, required this.tokens});
+
+  Future<void> _openGroupInfo(
+    BuildContext context,
+    ProfileMutualGroup mutualGroup,
+  ) async {
+    final nav = Navigator.of(context, rootNavigator: true);
+    GroupModel? targetGroup;
+
+    try {
+      final groupListCubit = context.read<GroupListCubit>();
+      for (final g in groupListCubit.cachedGroupsChats) {
+        if (g.id == mutualGroup.id) {
+          targetGroup = g;
+          break;
+        }
+      }
+    } catch (_) {}
+
+    if (targetGroup == null) {
+      try {
+        final groups = await GroupChatServices().getMyGroups();
+        for (final g in groups) {
+          if (g.id == mutualGroup.id) {
+            targetGroup = g;
+            break;
+          }
+        }
+      } catch (_) {}
+    }
+
+    targetGroup ??= GroupModel(
+      id: mutualGroup.id,
+      name: mutualGroup.name,
+      createdBy: '',
+      createdAt: DateTime.now(),
+    );
+
+    nav.pushNamed(AppRoutes.groupInfoViewRoute, arguments: targetGroup);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final total = mutuals.groupsCount;
+    final hiddenCount = total - mutuals.groups.length;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          context.l10n.mutualGroupsCount(total),
+          style: TextStyle(
+            fontSize: 13,
+            fontWeight: FontWeight.w600,
+            color: tokens.onSurface,
+            height: 1.25,
+          ),
+        ),
+        const SizedBox(height: 8),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            for (final group in mutuals.groups)
+              _GroupChip(
+                label: group.name,
+                icon: Icons.groups_rounded,
+                background: tokens.primaryTonal,
+                foreground: tokens.iconAccent,
+                onTap: () => _openGroupInfo(context, group),
+              ),
+            if (hiddenCount > 0)
+              _GroupChip(
+                label: '+$hiddenCount',
+                background: tokens.surfaceVariant,
+                foreground: tokens.onSurfaceVariant,
+              ),
+          ],
+        ),
+      ],
+    );
+  }
+}
+
+class _GroupChip extends StatelessWidget {
+  final String label;
+  final IconData? icon;
+  final Color background;
+  final Color foreground;
+  final VoidCallback? onTap;
+
+  const _GroupChip({
+    required this.label,
+    required this.background,
+    required this.foreground,
+    this.icon,
+    this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final chip = ConstrainedBox(
+      constraints: const BoxConstraints(maxWidth: 180),
+      child: Container(
+        height: 28,
+        padding: const EdgeInsets.symmetric(horizontal: 12),
+        decoration: BoxDecoration(
+          color: background,
+          borderRadius: BorderRadius.circular(999),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (icon != null) ...[
+              Icon(icon, size: 13, color: foreground),
+              const SizedBox(width: 4),
+            ],
+            Flexible(
+              child: Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w500,
+                  color: foreground,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    if (onTap == null) return chip;
+
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: onTap,
+      child: chip,
+    );
+  }
+}

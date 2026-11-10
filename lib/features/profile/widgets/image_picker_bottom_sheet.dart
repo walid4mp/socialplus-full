@@ -1,0 +1,84 @@
+import 'package:flutter/material.dart';
+import 'package:gap/gap.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:social_media_app/core/localization/l10n_extension.dart';
+
+class ImagePickerBottomSheet extends StatelessWidget {
+  final String title;
+  final Function(ImageSource source) onImageSelected;
+  final bool showRemoveOption;
+  final VoidCallback? onRemoveImage;
+
+  /// When non-null, shows an optional "Crop & edit" row for the photo the user
+  /// has already picked in this session.
+  final VoidCallback? onEditImage;
+
+  const ImagePickerBottomSheet({
+    super.key,
+    required this.title,
+    required this.onImageSelected,
+    this.showRemoveOption = false,
+    this.onRemoveImage,
+    this.onEditImage,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              title,
+              style: Theme.of(context).textTheme.titleMedium!.copyWith(
+                fontWeight: FontWeight.w500,
+                fontSize: 18,
+              ),
+            ),
+            Gap(20),
+            ListTile(
+              leading: Icon(
+                Icons.photo_library_outlined,
+                color: Theme.of(context).primaryColor,
+              ),
+              title: Text(context.l10n.chooseFromGallery),
+              onTap: () => onImageSelected(ImageSource.gallery),
+            ),
+            ListTile(
+              leading: const Icon(
+                Icons.camera_alt_outlined,
+                color: Colors.green,
+              ),
+              title: Text(context.l10n.takeAPhoto),
+              onTap: () => onImageSelected(ImageSource.camera),
+            ),
+            if (onEditImage != null)
+              ListTile(
+                leading: Icon(
+                  Icons.crop_rounded,
+                  color: Theme.of(context).primaryColor,
+                ),
+                title: Text(context.l10n.cropEdit),
+                onTap: onEditImage,
+              ),
+            if (showRemoveOption) ...[
+              ListTile(
+                leading: const Icon(
+                  Icons.delete_outline_rounded,
+                  color: Colors.redAccent,
+                ),
+                title: Text(
+                  context.l10n.removePhoto,
+                  style: TextStyle(color: Colors.redAccent),
+                ),
+                onTap: onRemoveImage,
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}

@@ -1,0 +1,166 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:gap/gap.dart';
+import 'package:social_media_app/features/posts/widgets/build_option_item.dart';
+import '../../../core/toast/app_toast.dart';
+import '../cubits/posts_cubit/posts_cubit.dart';
+import 'package:social_media_app/core/localization/l10n_extension.dart';
+
+class AddPostOptionsBottomSheet extends StatelessWidget {
+  final DraggableScrollableController controller;
+  final VoidCallback onPickTheme;
+  final VoidCallback onPickGif;
+
+  const AddPostOptionsBottomSheet({
+    super.key,
+    required this.controller,
+    required this.onPickTheme,
+    required this.onPickGif,
+  });
+
+  static const double _initialSize = 0.2;
+  static const double _minSize = 0.15;
+  static const double _maxSize = 0.75;
+
+  void _onHandleDragUpdate(DragUpdateDetails details) {
+    if (!controller.isAttached) return;
+    final deltaPixels = details.primaryDelta ?? 0.0;
+    final currentPixels = controller.sizeToPixels(controller.size);
+    final nextSize = controller
+        .pixelsToSize(currentPixels - deltaPixels)
+        .clamp(_minSize, _maxSize);
+    controller.jumpTo(nextSize);
+  }
+
+  void _onHandleDragEnd(DragEndDetails details) {
+    if (!controller.isAttached) return;
+    final velocity = details.primaryVelocity ?? 0.0;
+    if (velocity < -250) {
+      controller.animateTo(
+        _maxSize,
+        duration: const Duration(milliseconds: 260),
+        curve: Curves.easeOutCubic,
+      );
+    } else if (velocity > 250) {
+      controller.animateTo(
+        _minSize,
+        duration: const Duration(milliseconds: 260),
+        curve: Curves.easeOutCubic,
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final postsCubit = context.read<PostsCubit>();
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final isDark = theme.brightness == Brightness.dark;
+
+    return DraggableScrollableSheet(
+      controller: controller,
+      initialChildSize: _initialSize,
+      minChildSize: _minSize,
+      maxChildSize: _maxSize,
+      builder: (context, scrollController) {
+        return Container(
+          decoration: BoxDecoration(
+            color: isDark ? const Color(0xFF1E1E1E) : Colors.white,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: isDark ? 0.3 : 0.08),
+                blurRadius: 25,
+                offset: const Offset(0, -4),
+              ),
+            ],
+          ),
+          child: Column(
+            children: [
+              GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onVerticalDragUpdate: _onHandleDragUpdate,
+                onVerticalDragEnd: _onHandleDragEnd,
+                child: SizedBox(
+                  width: double.infinity,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Gap(12),
+                      Center(
+                        child: Container(
+                          width: 48,
+                          height: 5,
+                          decoration: BoxDecoration(
+                            color: colorScheme.onSurfaceVariant.withValues(
+                              alpha: 0.3,
+                            ),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                        ),
+                      ),
+                      const Gap(16),
+                    ],
+                  ),
+                ),
+              ),
+              Expanded(
+                child: ListView(
+                  physics: const ClampingScrollPhysics(),
+                  controller: scrollController,
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  children: [
+                    BuildOptionItem(
+                      Icons.image_rounded,
+                      context.l10n.addPhoto,
+                      const Color(0xFF4CAF50),
+                      onTap: () => postsCubit.pickImageFromGallery(),
+                    ),
+                    BuildOptionItem(
+                      Icons.videocam_rounded,
+                      context.l10n.addVideo,
+                      const Color(0xFF2196F3),
+                      onTap: () => postsCubit.pickVideo(),
+                    ),
+                    BuildOptionItem(
+                      Icons.camera_alt_rounded,
+                      context.l10n.camera,
+                      const Color(0xFF009688),
+                      onTap: () => postsCubit.takePhotoByCamera(),
+                    ),
+                    BuildOptionItem(
+                      Icons.insert_drive_file_rounded,
+                      context.l10n.addDocument,
+                      const Color(0xFFFF9800),
+                      onTap: () => postsCubit.pickDocument(),
+                    ),
+                    BuildOptionItem(
+                      Icons.color_lens_rounded,
+                      context.l10n.backgroundColor,
+                      const Color(0xFFE91E63),
+                      onTap: onPickTheme,
+                    ),
+                    BuildOptionItem(
+                      Icons.gif_box_rounded,
+                      context.l10n.addGif,
+                      const Color(0xFF9C27B0),
+                      onTap: onPickGif,
+                    ),
+                    BuildOptionItem(
+                      Icons.video_camera_front_rounded,
+                      context.l10n.liveVideo,
+                      const Color(0xFFF44336),
+                      onTap:
+                          () => AppToast.info(context.l10n.liveVideoIsComing),
+                    ),
+                    const Gap(20),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+}

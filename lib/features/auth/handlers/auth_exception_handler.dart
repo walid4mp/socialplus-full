@@ -1,0 +1,181 @@
+import 'package:supabase_flutter/supabase_flutter.dart';
+import '../../../core/errors/network_error_utils.dart';
+import '../../../core/localization/app_l10n.dart';
+
+class AuthExceptionHandler {
+  static String handle(Object e) {
+    if (NetworkErrorUtils.isNetworkError(e) ||
+        e.toString().toLowerCase().contains('authretryablefetchexception')) {
+      return 'no-internet';
+    }
+
+    if (e is AuthException) {
+      return _handleAuthException(e);
+    }
+
+    final msg = e.toString().toLowerCase();
+    if (msg.contains('realtimesubscribeexception')) {
+      return 'no-internet';
+    }
+
+    if (NetworkErrorUtils.isTimeoutError(e)) {
+      return AppL10n.isArabic
+          ? 'انتهت مهلة الطلب. يرجى المحاولة مرة أخرى.'
+          : 'Request timed out. Please try again.';
+    }
+
+    if (msg.contains('aborted') || msg.contains('user_cancelled')) {
+      return AppL10n.isArabic
+          ? 'تم إلغاء عملية تسجيل الدخول.'
+          : 'Sign-in was cancelled.';
+    }
+
+    if (msg.contains('api_exception: 10') ||
+        msg.contains('apiexception: 10') ||
+        msg.contains('developer_error')) {
+      return AppL10n.isArabic
+          ? 'فشل تسجيل الدخول بجوجل (خطأ في إعدادات بصمة SHA-1 أو OAuth Client ID في وضع التطوير).'
+          : 'Google sign-in failed (Missing debug SHA-1 or OAuth Client ID misconfiguration).';
+    }
+
+    if (msg.contains('sign_in_failed') || msg.contains('google')) {
+      return AppL10n.isArabic
+          ? 'تعذر تسجيل الدخول بحساب جوجل. يرجى المحاولة مرة أخرى.'
+          : 'Google sign-in failed. Please try again.';
+    }
+
+    return AppL10n.current.somethingWentWrongPlease;
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  // Supabase AuthException mapper
+  // ─────────────────────────────────────────────────────────────
+  static String _handleAuthException(AuthException e) {
+    final msg = e.message.toLowerCase();
+    final code = e.code?.toLowerCase() ?? '';
+
+    if (msg.contains('socketexception') ||
+        msg.contains('clientexception') ||
+        msg.contains('failed host lookup')) {
+      return 'no-internet';
+    }
+
+    // ── Email / format ─────────────────────────────────────────
+    if (code == 'validation_failed' ||
+        msg.contains('invalid format') ||
+        msg.contains('unable to validate email')) {
+      return 'Please enter a valid email address.';
+    }
+
+    if (msg.contains('email not confirmed') || code == 'email_not_confirmed') {
+      return 'Your email is not verified yet. Please check your inbox.';
+    }
+
+    if (msg.contains('email already registered') ||
+        msg.contains('user already registered') ||
+        code == 'email_exists') {
+      return 'This email is already registered. Try signing in instead.';
+    }
+
+    if (msg.contains('email link is invalid or has expired') ||
+        code == 'otp_expired') {
+      return 'The verification link has expired. Please request a new one.';
+    }
+
+    // ── Password ───────────────────────────────────────────────
+    if (code == 'invalid_password') {
+      return 'Incorrect password. Please try again.';
+    }
+
+    if (msg.contains('invalid login credentials') ||
+        msg.contains('invalid credentials') ||
+        code == 'invalid_credentials') {
+      return AppL10n.current.authErrIncorrectCredentials;
+    }
+
+    if (msg.contains('too many invalid password attempts') ||
+        code == 'too_many_attempts') {
+      return 'Account temporarily locked due to many failed attempts. Try again later.';
+    }
+
+    if (msg.contains('password should be at least') ||
+        msg.contains('weak password') ||
+        code == 'weak_password') {
+      return 'Password is too weak. Use at least 6 characters.';
+    }
+
+    if (msg.contains('same password') || code == 'same_password') {
+      return 'New password must be different from the current one.';
+    }
+
+    // ── Account / session ──────────────────────────────────────
+    if (code == 'user_banned' || msg.contains('user is banned')) {
+      return 'This account has been deleted or disabled.';
+    }
+
+    if (msg.contains('user not found') || code == 'user_not_found') {
+      return 'No account found with this email.';
+    }
+
+    if (msg.contains('email change') && msg.contains('disabled')) {
+      return 'Email change is currently disabled.';
+    }
+
+    if (msg.contains('signup') && msg.contains('disabled') ||
+        code == 'signup_disabled') {
+      return 'New registrations are currently disabled. Try again later.';
+    }
+
+    if (msg.contains('too many requests') ||
+        code == 'over_request_rate_limit' ||
+        code == 'over_email_send_rate_limit') {
+      return 'Too many attempts. Please wait a moment and try again.';
+    }
+
+    if (msg.contains('session expired') ||
+        msg.contains('jwt expired') ||
+        code == 'session_expired' ||
+        code == 'not_authenticated') {
+      return 'Your session has expired. Please sign in again.';
+    }
+
+    if (msg.contains('not authorized') || code == 'not_authorized') {
+      return 'You are not authorized to perform this action.';
+    }
+
+    if (msg.contains('database error') ||
+        msg.contains('api key not found') ||
+        msg.contains('service unavailable')) {
+      return 'Our services are currently under maintenance. Please try again in a few minutes.';
+    }
+
+    if (msg.contains('postgrestexception') ||
+        msg.contains('permission denied')) {
+      return 'We couldn\'t sync your profile data. Please contact support.';
+    }
+
+    // ── Phone ──────────────────────────────────────────────────
+    if (msg.contains('phone') && msg.contains('invalid')) {
+      return 'Please enter a valid phone number.';
+    }
+
+    if (msg.contains('otp') ||
+        msg.contains('token') && msg.contains('invalid')) {
+      return 'Invalid or expired verification code.';
+    }
+
+    // ── OAuth (Google / Facebook / Apple) ─────────────────────
+    if (msg.contains('provider') && msg.contains('disabled')) {
+      return 'This sign-in method is currently unavailable.';
+    }
+
+    if (msg.contains('id_token') || msg.contains('no id token')) {
+      return 'Social sign-in failed. Please try again.';
+    }
+
+    // ── Fallback ───────────────────────────────────────────────
+    return e.message.isNotEmpty
+        ? e.message
+        : 'An authentication error occurred. Please try again.';
+  }
+}

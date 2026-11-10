@@ -1,0 +1,155 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:gap/gap.dart';
+import 'package:social_media_app/core/widgets/custom_elevated_button.dart';
+import 'package:social_media_app/core/widgets/custom_text_form_field.dart';
+import 'package:social_media_app/features/auth/cubits/auth_cubit/auth_cubit.dart';
+import 'package:social_media_app/features/auth/widgets/sign_text_section.dart';
+import 'package:social_media_app/features/auth/widgets/social_sign_section.dart';
+import '../../../core/router/app_routes.dart';
+import '../../../core/toast/app_toast.dart';
+import '../../../core/utilities/app_formatters.dart';
+import '../../../core/utilities/app_validators.dart';
+import 'package:social_media_app/core/localization/l10n_extension.dart';
+
+class LoginViewWidget extends StatefulWidget {
+  const LoginViewWidget({super.key});
+
+  @override
+  State<LoginViewWidget> createState() => _LoginViewWidgetState();
+}
+
+class _LoginViewWidgetState extends State<LoginViewWidget> {
+  final _formKey = GlobalKey<FormState>();
+  final _emailController = TextEditingController();
+  final _passwordController = TextEditingController();
+
+  @override
+  void dispose() {
+    _emailController.dispose();
+    _passwordController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final bottomInset = MediaQuery.of(context).viewInsets.bottom;
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 22),
+      child: SingleChildScrollView(
+        scrollDirection: Axis.vertical,
+        child: Form(
+          key: _formKey,
+          child: Column(
+            children: [
+              const Gap(12),
+              CustomTextFormField(
+                prefixIcon: const Icon(Icons.email_rounded),
+                controller: _emailController,
+                labelText: context.l10n.email,
+                hintText: context.l10n.enterEmail,
+                inputFormatters: AppFormatters.noSpaces,
+                validator: AppValidators.validateEmail,
+              ),
+              const Gap(26),
+              CustomTextFormField(
+                prefixIcon: const Icon(Icons.lock_rounded),
+                controller: _passwordController,
+                labelText: context.l10n.password,
+                hintText: context.l10n.enterPassword,
+                isPassword: true,
+                validator: AppValidators.validatePassword,
+              ),
+              const Gap(12),
+              Align(
+                alignment: AlignmentDirectional.centerEnd,
+                child: GestureDetector(
+                  onTap: () {
+                    Navigator.of(
+                      context,
+                    ).pushNamed(AppRoutes.forgotPasswordRoute);
+                  },
+                  child: Text(
+                    context.l10n.forgotPassword,
+                    style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                      color: Theme.of(context).primaryColor,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              ),
+              const Gap(42),
+              BlocConsumer<AuthCubit, AuthState>(
+                listenWhen:
+                    (previous, current) =>
+                        (previous is! AuthSuccess && current is AuthSuccess) ||
+                        current is AuthFailure ||
+                        current is AuthMfaRequired,
+                listener: (context, state) async {
+                  if (state is AuthMfaRequired) {
+                    Navigator.of(
+                      context,
+                      rootNavigator: true,
+                    ).pushNamed(AppRoutes.twoFactorChallengeRoute);
+                    return;
+                  }
+                  if (state is AuthSuccess) {
+                    AppToast.success(context.l10n.loginSuccessfully);
+                    await Future.delayed(const Duration(milliseconds: 550));
+                    if (context.mounted) {
+                      Navigator.of(
+                        context,
+                        rootNavigator: true,
+                      ).pushNamedAndRemoveUntil(
+                        AppRoutes.homeRoute,
+                        (route) => false,
+                      );
+                    }
+                  } else if (state is AuthFailure) {
+                    AppToast.error(state.errMsg);
+                  }
+                },
+                buildWhen:
+                    (previous, current) =>
+                        current is AuthLoading ||
+                        current is AuthSuccess ||
+                        current is AuthFailure ||
+                        current is AuthInitial ||
+                        current is AuthSignedOut ||
+                        current is AuthAccountDeleted,
+                builder: (context, state) {
+                  return CustomElevatedButton(
+                    txtBtn: context.l10n.signIn2,
+                    isLoading: state is AuthLoading,
+                    isSuccess: state is AuthSuccess,
+                    onPressed: () {
+                      if (_formKey.currentState!.validate()) {
+                        FocusManager.instance.primaryFocus?.unfocus();
+                        context.read<AuthCubit>().signInWithEmail(
+                          _emailController.text.trim(),
+                          _passwordController.text,
+                        );
+                      }
+                    },
+                  );
+                },
+              ),
+              const Gap(14),
+              SocialSignSection(label: context.l10n.orSignInWith),
+              const Gap(22),
+              SignTextSection(
+                staticText: context.l10n.dontHaveAnAccount,
+                clickableText: context.l10n.signUp,
+                onTap: () {
+                  DefaultTabController.of(context).animateTo(1);
+                },
+              ),
+              const Gap(18),
+              Gap(bottomInset > 0 ? bottomInset : 18),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}

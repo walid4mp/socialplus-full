@@ -1,0 +1,285 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import '../../../features/home/cubits/home_cubit/home_cubit.dart';
+import '../../cache/repository/media_cache_repository.dart';
+import '../../cache/utils/cloudinary_url_extensions.dart';
+import '../../constants/app_images.dart';
+import '../../supabase/supabase_provider.dart';
+import '../../widgets/app_network_image.dart';
+import '../cubits/shared_media_cubit/shared_media_cubit.dart';
+import '../helpers/media_action_helper.dart' hide ShowInChatCallback;
+import '../helpers/shared_media_tabs_skeleton.dart';
+import '../models/shared_media_item.dart';
+import '../views/shared_media_view.dart';
+import 'document_grid_tile.dart';
+import 'media_links_list.dart';
+import 'sectioned_media_grid.dart';
+import 'shared_documents_grid.dart';
+import 'shared_media_action_menu.dart';
+import 'shared_images_grid.dart';
+import 'video_thumbnail_grid.dart';
+import 'voice_grid_tile.dart';
+import 'voice_message_grid.dart';
+import 'package:social_media_app/core/localization/l10n_extension.dart';
+
+class MediaTabView extends StatefulWidget {
+  final SharedMediaTab tab;
+  final ShowInChatCallback? onShowInChat;
+
+  const MediaTabView({super.key, required this.tab, this.onShowInChat});
+
+  @override
+  State<MediaTabView> createState() => _MediaTabViewState();
+}
+
+class _MediaTabViewState extends State<MediaTabView>
+    with AutomaticKeepAliveClientMixin {
+  @override
+  bool get wantKeepAlive => true;
+
+  @override
+  void initState() {
+    super.initState();
+    context.read<SharedMediaCubit>().loadTab(widget.tab);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    super.build(context);
+    return BlocBuilder<SharedMediaCubit, SharedMediaState>(
+      builder: (context, state) {
+        final isLoading = state.isLoading(widget.tab);
+        final items = state.itemsFor(widget.tab);
+        final currentUserAvatar =
+            context.read<HomeCubit>().currentUserData?.imageUrl;
+
+        if (isLoading && items.isEmpty) {
+          return switch (widget.tab) {
+            SharedMediaTab.all => const GridMediaSkeleton(),
+            SharedMediaTab.images => const GridMediaSkeleton(),
+            SharedMediaTab.videos => const GridMediaSkeleton(),
+            SharedMediaTab.voice => const VoiceListSkeleton(),
+            SharedMediaTab.documents => const GridMediaSkeleton(),
+            SharedMediaTab.links => const LinksListSkeleton(),
+          };
+        }
+        if (items.isEmpty) {
+          final size = MediaQuery.sizeOf(context);
+          final imageSize = (size.width * 0.52).clamp(120.0, 160.0);
+
+          return Center(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.symmetric(horizontal: 24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Image.asset(
+                    _assetFor(widget.tab),
+                    width: imageSize,
+                    height: imageSize,
+                    fit: BoxFit.contain,
+                    color: Theme.of(
+                      context,
+                    ).primaryColor.withValues(alpha: 0.85),
+                  ),
+                  SizedBox(height: size.height * 0.06),
+                  Text(
+                    context.l10n.noSharedYet(_labelFor(widget.tab, context)),
+                    textAlign: TextAlign.center,
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      color: Theme.of(context).hintColor,
+                      fontSize: 14.5,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        }
+
+        return switch (widget.tab) {
+          SharedMediaTab.all => _AllMediaGrid(
+            items: items,
+            onShowInChat: widget.onShowInChat,
+            currentUserAvatar: currentUserAvatar,
+          ),
+          SharedMediaTab.images => SharedImagesGrid(
+            items: items,
+            onShowInChat: widget.onShowInChat,
+          ),
+          SharedMediaTab.videos => VideoThumbnailGrid(
+            items: items,
+            onShowInChat: widget.onShowInChat,
+          ),
+          SharedMediaTab.voice => VoiceMessageGrid(
+            items: items,
+            onShowInChat: widget.onShowInChat,
+            currentUserAvatar: currentUserAvatar,
+          ),
+          SharedMediaTab.documents => SharedDocumentsGrid(
+            items: items,
+            onShowInChat: widget.onShowInChat,
+          ),
+          SharedMediaTab.links => MediaLinksList(
+            items: items,
+            onShowInChat: widget.onShowInChat,
+          ),
+        };
+      },
+    );
+  }
+
+  String _assetFor(SharedMediaTab tab) => switch (tab) {
+    SharedMediaTab.all => AppImages.sharedMediaIcon,
+    SharedMediaTab.images => AppImages.imageGalleryIcon,
+    SharedMediaTab.videos => AppImages.videoMediaIcon,
+    SharedMediaTab.voice => AppImages.voiceMessagesIcon,
+    SharedMediaTab.documents => AppImages.sharedDocumentsIcon,
+    SharedMediaTab.links => AppImages.linkIcon,
+  };
+
+  String _labelFor(SharedMediaTab tab, BuildContext context) => switch (tab) {
+    SharedMediaTab.all => context.l10n.sharedLabelMedia,
+    SharedMediaTab.images => context.l10n.sharedLabelImages,
+    SharedMediaTab.videos => context.l10n.sharedLabelVideos,
+    SharedMediaTab.voice => context.l10n.voiceMessages,
+    SharedMediaTab.documents => context.l10n.sharedLabelDocuments,
+    SharedMediaTab.links => context.l10n.sharedLabelLinks,
+  };
+}
+
+class _AllMediaGrid extends StatelessWidget {
+  final List<SharedMediaItem> items;
+  final ShowInChatCallback? onShowInChat;
+  final String? currentUserAvatar;
+  const _AllMediaGrid({
+    required this.items,
+    this.onShowInChat,
+    this.currentUserAvatar,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return SectionedMediaGrid(
+      items: items,
+      tileBuilder: (context, item) {
+        final isMe = item.senderId == SupabaseProvider.id;
+        final isVoice = (item.voiceUrl ?? '').isNotEmpty;
+
+        VoidCallback? onOpen;
+        String openLabel = context.l10n.open;
+        IconData openIcon = Icons.open_in_full_rounded;
+
+        if (item.messageType == 'image') {
+          onOpen =
+              () => MediaActionHelper.openFullScreenMedia(context, items, item);
+          openLabel = context.l10n.viewPhoto;
+          openIcon = Icons.image_outlined;
+        } else if (item.messageType == 'video') {
+          onOpen =
+              () => MediaActionHelper.openFullScreenMedia(context, items, item);
+          openLabel = context.l10n.playVideo;
+          openIcon = Icons.play_circle_outline_rounded;
+        } else if (isVoice) {
+          onOpen =
+              () => MediaActionHelper.openFullScreenMedia(context, items, item);
+          openLabel = context.l10n.playVoiceMessage;
+          openIcon = Icons.mic_none_rounded;
+        } else if (item.messageType == 'file') {
+          final repo = context.read<MediaCacheRepository>();
+          final local = repo.resolveLocalPathSync(item.fileUrl ?? '');
+          final fileToOpen = local ?? item.fileUrl ?? '';
+          onOpen = () => DocumentGridTile.openLocalFile(context, fileToOpen);
+          openLabel = context.l10n.open;
+          openIcon = Icons.open_in_new_rounded;
+        }
+
+        return GestureDetector(
+          onTap: () {
+            if (item.messageType == 'image' ||
+                item.messageType == 'video' ||
+                isVoice) {
+              MediaActionHelper.openFullScreenMedia(context, items, item);
+            }
+          },
+          onLongPressStart: ((details) {
+            showSharedMediaActionMenu(
+              context: context,
+              globalPosition: details.globalPosition,
+              isMe: isMe,
+              onShowInChat:
+                  () => MediaActionHelper.handleShowInChat(
+                    context,
+                    item,
+                    onShowInChat,
+                  ),
+
+              onConfirmedDelete:
+                  () => MediaActionHelper.handleDelete(
+                    context,
+                    item,
+                    forEveryone: isMe,
+                  ),
+              onOpen: onOpen,
+              openLabel: openLabel,
+              openIcon: openIcon,
+            );
+          }),
+          child: switch (item.messageType) {
+            'image' => AppNetworkImage(
+              imageUrl: item.imageUrl ?? '',
+              fit: BoxFit.cover,
+              errorWidget:
+                  (context, url, error) => Container(
+                    color:
+                        Theme.of(context).colorScheme.surfaceContainerHighest,
+                    child: Icon(
+                      Icons.broken_image_rounded,
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      size: 28,
+                    ),
+                  ),
+            ),
+            'video' => Stack(
+              fit: StackFit.expand,
+              children: [
+                AppNetworkImage(
+                  imageUrl:
+                      item.videoUrl?.cloudinaryVideoThumbnailUrl ??
+                      item.videoUrl ??
+                      '',
+                  fit: BoxFit.cover,
+                  placeholder: (_, __) => Container(color: Colors.black12),
+                  errorWidget:
+                      (context, url, error) => Container(
+                        color:
+                            Theme.of(
+                              context,
+                            ).colorScheme.surfaceContainerHighest,
+                        child: Icon(
+                          Icons.video_file_rounded,
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                          size: 28,
+                        ),
+                      ),
+                ),
+                const Center(
+                  child: Icon(
+                    Icons.play_circle_fill_rounded,
+                    color: Colors.white,
+                    size: 24,
+                  ),
+                ),
+              ],
+            ),
+            'file' => DocumentGridTile(item: item),
+            _ => VoiceGridTile(
+              item: item,
+              currentUserAvatar: currentUserAvatar,
+            ),
+          },
+        );
+      },
+    );
+  }
+}

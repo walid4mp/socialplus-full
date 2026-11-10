@@ -1,0 +1,121 @@
+import 'dart:typed_data';
+import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:social_media_app/core/notifications/channels/notification_channel_setup.dart';
+import 'package:social_media_app/core/notifications/helpers/notification_avatar_builder.dart';
+import 'package:social_media_app/core/notifications/helpers/notification_id_helper.dart';
+
+class SocialNotificationDispatcher {
+  SocialNotificationDispatcher._();
+  static final SocialNotificationDispatcher instance =
+      SocialNotificationDispatcher._();
+
+  final NotificationAvatarBuilder _avatarBuilder = NotificationAvatarBuilder();
+  final FlutterLocalNotificationsPlugin _localNotifications =
+      FlutterLocalNotificationsPlugin();
+
+  static const Set<String> _socialNotificationTypes = {
+    'friend_request',
+    'friend_accept',
+    'follow',
+    'post_react',
+    'post_comment',
+    'post_reshare',
+    'post_save',
+    'mention',
+    'comment_reply',
+    'comment_react',
+    'story_react',
+    'message_react',
+    'feedback_reply',
+    'group_join_request',
+    'group_join_accept',
+  };
+
+  static bool isSocialType(String type) =>
+      _socialNotificationTypes.contains(type);
+
+  static String resolveSocialReferenceId(Map<String, dynamic> data) {
+    final feedbackId = data['feedbackId'] as String?;
+    if (feedbackId != null && feedbackId.isNotEmpty) return feedbackId;
+    final postId = data['postId'] as String?;
+    if (postId != null && postId.isNotEmpty) return postId;
+    final storyId = data['storyId'] as String?;
+    if (storyId != null && storyId.isNotEmpty) return storyId;
+    final groupId = data['groupId'] as String?;
+    if (groupId != null && groupId.isNotEmpty) return groupId;
+    return '';
+  }
+
+  Future<void> showSocialNotificationFromMessage(RemoteMessage message) async {
+    final data = message.data;
+    final String type = data['notificationType'] ?? 'general';
+
+    final String actorId =
+        data['actorId'] ?? data['requesterId'] ?? data['followerId'] ?? '';
+    final String actorName =
+        data['actorName'] ??
+        data['requesterName'] ??
+        data['followerName'] ??
+        'Someone';
+    final String actorImageUrl =
+        data['actorImageUrl'] ??
+        data['requesterImageUrl'] ??
+        data['followerImageUrl'] ??
+        '';
+    final String referenceId = resolveSocialReferenceId(data);
+
+    String title =
+        (data['title'] as String?)?.isNotEmpty == true
+            ? data['title']!
+            : actorName;
+    final String body =
+        (data['body'] as String?)?.isNotEmpty == true
+            ? data['body']!
+            : 'New notification';
+
+    if (type == 'feedback_reply' &&
+        !title.contains('☑️') &&
+        !title.contains('✓')) {
+      title = '☑️ $title';
+    }
+
+    Uint8List avatarBitmap;
+    try {
+      if (type == 'feedback_reply') {
+        avatarBitmap = await _avatarBuilder.appIconBitmap();
+      } else {
+        avatarBitmap = await _avatarBuilder.getAvatarBitmap(actorImageUrl);
+      }
+    } catch (_) {
+      avatarBitmap = await _avatarBuilder.defaultBitmap();
+    }
+
+    final androidDetails = AndroidNotificationDetails(
+      NotificationChannelSetup.socialChannel.id,
+      NotificationChannelSetup.socialChannel.name,
+      channelDescription: NotificationChannelSetup.socialChannel.description,
+      importance: Importance.high,
+      priority: Priority.high,
+      icon: '@drawable/ic_notification',
+      largeIcon: ByteArrayAndroidBitmap(avatarBitmap),
+      styleInformation: BigTextStyleInformation(body),
+      autoCancel: true,
+      color: const Color(0xFF2196F3),
+    );
+
+    final String mentionContext = data['context'] ?? '';
+
+    await _localNotifications.show(
+      createNotificationId('$type|$referenceId|$actorId'),
+      title,
+      body,
+      NotificationDetails(android: androidDetails),
+      payload:
+          type == 'message_react'
+              ? 'message_react|${data['isGroup']}|${data['groupId']}|${data['groupName']}|${data['actorId']}|${data['actorName']}|${data['actorImageUrl']}'
+              : 'social|$type|$referenceId|$actorId|$actorName|$actorImageUrl|$mentionContext',
+    );
+  }
+}

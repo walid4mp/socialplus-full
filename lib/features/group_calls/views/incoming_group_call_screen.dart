@@ -1,0 +1,350 @@
+import 'dart:async';
+import 'package:audioplayers/audioplayers.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import '../../../core/notifications/dispatchers/group_call_dispatcher.dart';
+import '../../../core/services/current_user_name_resolver.dart';
+import '../../../core/services/permissions/app_permissions_service.dart';
+import '../../../core/supabase/supabase_provider.dart';
+import '../../../core/utilities/supabase_constants.dart';
+import '../../../core/widgets/calls/call_avatar_backdrop.dart';
+import '../../../core/widgets/calls/call_layout_metrics.dart';
+import '../../../core/widgets/calls/calls.dart';
+import '../models/group_call_model.dart';
+import '../services/group_call_signaling_service.dart';
+import 'livekit_group_call_view.dart';
+import 'package:social_media_app/core/localization/l10n_extension.dart';
+
+class IncomingGroupCallScreen extends StatefulWidget {
+  final GroupCallModel call;
+  final bool autoAccept;
+
+  const IncomingGroupCallScreen({
+    super.key,
+    required this.call,
+    this.autoAccept = false,
+  });
+
+  @override
+  State<IncomingGroupCallScreen> createState() =>
+      _IncomingGroupCallScreenState();
+}
+
+class _IncomingGroupCallScreenState extends State<IncomingGroupCallScreen>
+    with TickerProviderStateMixin {
+  final AudioPlayer _audioPlayer = AudioPlayer();
+  bool _ringtoneStopped = false;
+  late final Future<String> _nameFuture;
+  bool _isAccepting = false;
+  StreamSubscription? _statusSubscription;
+  StreamSubscription? _membershipSubscription;
+  late final GroupCallSignalingService _signaling;
+
+  late final AnimationController _shakeController;
+  late final Animation<double> _shakeAnim;
+
+  @override
+  void initState() {
+    super.initState();
+    FocusManager.instance.primaryFocus?.unfocus();
+    _signaling = context.read<GroupCallSignalingService>();
+    _nameFuture = CurrentUserNameResolver.resolve();
+    _playRingtone();
+    _initAnimations();
+    _listenToCallStatus();
+    _listenToMembership();
+
+    if (widget.autoAccept) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) unawaited(_acceptCall(context));
+      });
+    }
+  }
+
+  void _initAnimations() {
+    _shakeController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 500),
+    )..repeat(reverse: true);
+    _shakeAnim = Tween<double>(begin: -3, end: 3).animate(
+      CurvedAnimation(parent: _shakeController, curve: Curves.elasticIn),
+    );
+  }
+
+  void _listenToCallStatus() {
+    _statusSubscription = _signaling
+        .activeCallStream(widget.call.groupId)
+        .listen((activeCall) {
+          if (!mounted || _isAccepting) return;
+          if (activeCall == null ||
+              activeCall.status == GroupCallStatus.ended ||
+              activeCall.status == GroupCallStatus.missed) {
+            _cleanup();
+            if (Navigator.canPop(context)) Navigator.pop(context);
+          }
+        });
+  }
+
+  Future<void> _playRingtone() async {
+    try {
+      await _audioPlayer.setReleaseMode(ReleaseMode.loop);
+      if (_ringtoneStopped || !mounted) return;
+      await _audioPlayer.play(AssetSource('sounds/incoming_ring.mp3'));
+      if (_ringtoneStopped && mounted) await _audioPlayer.stop();
+    } catch (e) {
+      debugPrint('[IncomingGroupCall] failed to play ringtone: $e');
+    }
+  }
+
+  Future<void> _stopRingtone() async {
+    if (_ringtoneStopped) return;
+    _ringtoneStopped = true;
+    try {
+      await _audioPlayer.stop();
+    } catch (e) {
+      debugPrint('[IncomingGroupCall] failed to stop ringtone: $e');
+    }
+  }
+
+  Future<void> _disposeAudioPlayer() async {
+    try {
+      await _audioPlayer.dispose();
+    } catch (e) {
+      debugPrint('[IncomingGroupCall] audio player dispose failed: $e');
+    }
+  }
+
+  void _cancelIncomingNotification() {
+    unawaited(
+      GroupCallDispatcher.instance.cancelIncomingGroupCallNotification(
+        widget.call.callId,
+      ),
+    );
+  }
+
+  void _cancelSubscriptions() {
+    _statusSubscription?.cancel();
+    _statusSubscription = null;
+    _membershipSubscription?.cancel();
+    _membershipSubscription = null;
+  }
+
+  void _cleanup() {
+    _cancelSubscriptions();
+    unawaited(_stopRingtone());
+    _cancelIncomingNotification();
+  }
+
+  void _listenToMembership() {
+    final myId = SupabaseProvider.id;
+    _membershipSubscription = SupabaseProvider.client
+        .from(SupabaseConstants.groupMembers)
+        .stream(primaryKey: ['id'])
+        .eq(GroupMemberColumns.groupId, widget.call.groupId)
+        .listen((data) {
+          if (!mounted || _isAccepting) return;
+          final myRow = data.firstWhere(
+            (row) => row[GroupMemberColumns.userId] == myId,
+            orElse: () => <String, dynamic>{},
+          );
+          final isMember =
+              myRow.isNotEmpty &&
+              myRow[GroupMemberColumns.membershipStatus] == 'active';
+          if (!isMember) {
+            _cleanup();
+            if (Navigator.canPop(context)) Navigator.pop(context);
+          }
+        });
+  }
+
+  Future<void> _acceptCall(BuildContext context) async {
+    if (_isAccepting) return;
+    _isAccepting = true;
+    try {
+      final granted = await AppPermissionsService.instance
+          .ensureCallPermissions(
+            isVideo: widget.call.type == GroupCallType.video,
+            context: context,
+          );
+      if (!granted || !context.mounted) {
+        _isAccepting = false;
+        return;
+      }
+      _statusSubscription?.cancel();
+      _statusSubscription = null;
+      _membershipSubscription?.cancel();
+      _membershipSubscription = null;
+      _shakeController.stop();
+      _cleanup();
+      final userName = await _nameFuture;
+      final updatedCall = await _signaling.acceptCall(widget.call.callId);
+      if (!context.mounted) return;
+      await Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(
+          builder:
+              (_) => LiveKitGroupCallView(
+                call: updatedCall,
+                currentUserId: SupabaseProvider.id,
+                currentUserName: userName,
+              ),
+        ),
+      );
+    } catch (e) {
+      debugPrint('[IncomingGroupCallScreen] acceptCall failed: $e');
+      if (context.mounted && Navigator.canPop(context)) {
+        Navigator.pop(context);
+      }
+    } finally {
+      if (mounted) {
+        _isAccepting = false;
+      }
+    }
+  }
+
+  @override
+  void dispose() {
+    _ringtoneStopped = true;
+    _cancelIncomingNotification();
+    _statusSubscription?.cancel();
+    _statusSubscription = null;
+    _membershipSubscription?.cancel();
+    _membershipSubscription = null;
+    unawaited(_disposeAudioPlayer());
+    _shakeController.stop();
+    _shakeController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final primary = Theme.of(context).primaryColor;
+    final isVideo = widget.call.type == GroupCallType.video;
+
+    return Scaffold(
+      resizeToAvoidBottomInset: false,
+      body: Stack(
+        children: [
+          CallAvatarBackdrop(
+            avatarUrl: widget.call.groupAvatarUrl,
+            baseColor: primary,
+          ),
+          CallAmbientBackground(
+            style: CallAmbientStyle.orbit,
+            isVideo: isVideo,
+          ),
+          SafeArea(
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                final metrics = CallLayoutMetrics.of(
+                  constraints,
+                  reservedHeight: 280,
+                );
+
+                return Column(
+                  children: [
+                    SizedBox(height: metrics.topGap),
+
+                    CallStatusPill(
+                      icon:
+                          isVideo
+                              ? Icons.videocam_rounded
+                              : Icons.phone_callback_rounded,
+                      label:
+                          isVideo
+                              ? context.l10n.incomingGroupVideo
+                              : context.l10n.incomingGroupVoice,
+                      shake: _shakeAnim,
+                    ),
+
+                    SizedBox(height: metrics.midGap),
+
+                    RippleAvatar(
+                      avatarDiameter: metrics.avatarDiameter,
+                      rippleColor: Colors.greenAccent,
+                      avatar: CallAvatarImage(
+                        imageUrl: widget.call.groupAvatarUrl,
+                        fallbackLabel: widget.call.groupName,
+                        diameter: metrics.avatarDiameter,
+                        borderColor: Colors.greenAccent,
+                        isGroup: true,
+                      ),
+                    ),
+
+                    SizedBox(height: metrics.midGap),
+
+                    Text(
+                      widget.call.groupName,
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 30,
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: context.ls(0.5),
+                        shadows: [
+                          Shadow(
+                            color: Colors.black45,
+                            blurRadius: 12,
+                            offset: Offset(0, 2),
+                          ),
+                        ],
+                      ),
+                      textAlign: TextAlign.center,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+
+                    const SizedBox(height: 8),
+
+                    Text(
+                      context.l10n.isCalling(widget.call.initiatorName),
+                      style: TextStyle(
+                        color: Colors.white60,
+                        fontSize: 15,
+                        letterSpacing: context.ls(0.3),
+                      ),
+                    ),
+
+                    const Spacer(),
+
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 60),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                        children: [
+                          GlassCallActionButton(
+                            icon: Icons.call_end_rounded,
+                            label: context.l10n.decline,
+                            color: Colors.redAccent.shade700,
+                            size: metrics.buttonSize,
+                            onTap: () {
+                              _cleanup();
+                              _signaling.rejectCall(widget.call.callId);
+                              Navigator.pop(context);
+                            },
+                          ),
+                          GlassCallActionButton(
+                            icon:
+                                isVideo
+                                    ? Icons.videocam_rounded
+                                    : Icons.call_rounded,
+                            label: context.l10n.accept,
+                            color: Colors.green.shade600,
+                            size: metrics.buttonSize,
+                            emphasized: true,
+                            onTap: () => _acceptCall(context),
+                          ),
+                        ],
+                      ),
+                    ),
+
+                    SizedBox(height: metrics.bottomGap),
+                  ],
+                );
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
