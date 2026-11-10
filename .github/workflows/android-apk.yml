@@ -41,7 +41,11 @@ jobs:
           grep -n "versionCode" android/app/build.gradle
 
       - name: Pre-install NDK (يمنع فشل تثبيت NDK داخل Gradle)
-        run: yes | sdkmanager --install "ndk;27.1.12297006" > /dev/null
+        run: |
+          SDKM="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          [ -x "$SDKM" ] || SDKM="$(find "$ANDROID_HOME/cmdline-tools" -name sdkmanager -type f | head -1)"
+          echo "sdkmanager: $SDKM"
+          yes | "$SDKM" --install "ndk;27.1.12297006" > /dev/null
 
       - name: Build signed release APK
         working-directory: android
