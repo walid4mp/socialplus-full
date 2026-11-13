@@ -1,7 +1,9 @@
+
 import React from "react";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { Text, Pressable, View, StyleSheet } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { colors } from "../theme";
 import { useI18n } from "../i18n";
 import {
@@ -24,89 +26,71 @@ function ProfileStack() {
   return (
     <Stack.Navigator screenOptions={{ headerShown: false }}>
       <Stack.Screen name="ProfileMain" component={ProfileScreen} />
-      <Stack.Screen name="SettingsFromProfile" component={SettingsScreen} />
     </Stack.Navigator>
   );
 }
 
-/* أيقونة SVG-free موحدة: دائرة خلفية + إيموجي، حجم موحد 26 */
-function TabIcon({ glyph, focused, badge }: { glyph: string; focused: boolean; badge?: number }) {
+const VISIBLE = ["Home", "Reels", "Create", "Chats", "Profile"] as const;
+const GLYPH: Record<string, string> = { Home: "🏠", Reels: "🎬", Chats: "💬", Profile: "👤" };
+
+/* شريط تنقل مخصّص: أعمدة متساوية العرض، تسميات لا تُقتطع، زر ＋ مركزي */
+function AppTabBar({ state, descriptors, navigation }: any) {
+  const insets = useSafeAreaInsets();
+  const { lang } = useI18n();
+  const routes = state.routes.filter((r: any) => (VISIBLE as readonly string[]).includes(r.name));
+  const labels: Record<string, string> = {
+    Home: lang === "ar" ? "الرئيسية" : "Home",
+    Reels: lang === "ar" ? "ريلز" : "Reels",
+    Create: "",
+    Chats: lang === "ar" ? "دردشة" : "Chat",
+    Profile: lang === "ar" ? "حسابي" : "Me",
+  };
+
   return (
-    <View style={styles.iconWrap}>
-      <View style={[styles.iconBubble, focused && { backgroundColor: "rgba(91,103,241,0.18)" }]}>
-        <Text style={{ fontSize: 22, opacity: focused ? 1 : 0.6 }}>{glyph}</Text>
-      </View>
-      {!!badge && badge > 0 && (
-        <View style={styles.badge}>
-          <Text style={styles.badgeText}>{badge > 9 ? "9+" : badge}</Text>
-        </View>
-      )}
+    <View style={[styles.bar, { paddingBottom: Math.max(insets.bottom, 8) }]}>
+      {routes.map((route: any) => {
+        const idx = state.routes.findIndex((r: any) => r.key === route.key);
+        const focused = state.index === idx;
+        const onPress = () => {
+          const ev = navigation.emit({ type: "tabPress", target: route.key, canPreventDefault: true });
+          if (!focused && !ev.defaultPrevented) navigation.navigate(route.name);
+        };
+        if (route.name === "Create") {
+          return (
+            <Pressable key={route.key} onPress={onPress} style={styles.col} accessibilityRole="button">
+              <View style={styles.createBtn}>
+                <Text style={styles.plus}>＋</Text>
+              </View>
+            </Pressable>
+          );
+        }
+        return (
+          <Pressable key={route.key} onPress={onPress} style={styles.col} accessibilityRole="button">
+            <View style={[styles.pill, focused && styles.pillActive]}>
+              <Text style={[styles.glyph, { opacity: focused ? 1 : 0.55 }]}>{GLYPH[route.name]}</Text>
+            </View>
+            <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}
+              style={[styles.label, { color: focused ? colors.accent : colors.muted }]}>
+              {labels[route.name] ?? route.name}
+            </Text>
+          </Pressable>
+        );
+      })}
     </View>
   );
 }
 
 export function MainTabs() {
-  const { t, lang } = useI18n();
-  /* تسميات قصيرة لا تُقتطع في أي لغة */
-  const labels = {
-    home: lang === "ar" ? "الرئيسية" : "Home",
-    reels: lang === "ar" ? "ريلز" : "Reels",
-    chats: lang === "ar" ? "دردشة" : "Chat",
-    profile: lang === "ar" ? "حسابي" : "Me",
-  };
-
   return (
     <Tab.Navigator
-      screenOptions={{
-        headerShown: false,
-        tabBarHideOnKeyboard: true,
-        tabBarStyle: {
-          position: "absolute",
-          backgroundColor: "rgba(13,14,21,0.97)",
-          borderTopColor: "rgba(139,92,246,0.18)",
-          height: 64,
-          paddingTop: 6,
-          paddingBottom: 10,
-        },
-        tabBarActiveTintColor: colors.accent,
-        tabBarInactiveTintColor: colors.muted,
-        tabBarLabelStyle: { fontSize: 11, fontWeight: "700" },
-        tabBarItemStyle: { paddingVertical: 0, marginHorizontal: 2 },
-      }}
+      tabBar={(props) => <AppTabBar {...props} />}
+      screenOptions={{ headerShown: false, lazy: false }}
     >
-      <Tab.Screen
-        name="Home"
-        component={HomeScreen}
-        options={{ title: labels.home, tabBarIcon: ({ focused }) => <TabIcon glyph="🏠" focused={focused} /> }}
-      />
-      <Tab.Screen
-        name="Reels"
-        component={ReelsScreen}
-        options={{ title: labels.reels, tabBarIcon: ({ focused }) => <TabIcon glyph="🎬" focused={focused} /> }}
-      />
-      <Tab.Screen
-        name="Create"
-        component={CreatePostScreen}
-        options={{
-          title: "",
-          tabBarIcon: () => (
-            <View style={styles.createBtn}>
-              <Text style={{ color: "#fff", fontSize: 26, fontWeight: "300", marginTop: -3 }}>＋</Text>
-            </View>
-          ),
-        }}
-      />
-      <Tab.Screen
-        name="Chats"
-        component={ChatsStack}
-        options={{ title: labels.chats, tabBarIcon: ({ focused }) => <TabIcon glyph="💬" focused={focused} /> }}
-      />
-      <Tab.Screen
-        name="Profile"
-        component={ProfileStack}
-        options={{ title: labels.profile, tabBarIcon: ({ focused }) => <TabIcon glyph="👤" focused={focused} /> }}
-      />
-      {/* شاشات مخفية من الشريط — تُفتح بالتنقل */}
+      <Tab.Screen name="Home" component={HomeScreen} />
+      <Tab.Screen name="Reels" component={ReelsScreen} />
+      <Tab.Screen name="Create" component={CreatePostScreen} />
+      <Tab.Screen name="Chats" component={ChatsStack} />
+      <Tab.Screen name="Profile" component={ProfileStack} />
       <Tab.Screen name="Search" component={SearchScreen} options={{ tabBarButton: () => null }} />
       <Tab.Screen name="Notifications" component={NotificationsScreen} options={{ tabBarButton: () => null }} />
       <Tab.Screen name="Settings" component={SettingsScreen} options={{ tabBarButton: () => null }} />
@@ -116,18 +100,25 @@ export function MainTabs() {
 }
 
 const styles = StyleSheet.create({
-  iconWrap: { alignItems: "center", justifyContent: "center" },
-  iconBubble: { width: 38, height: 30, borderRadius: 10, alignItems: "center", justifyContent: "center" },
-  badge: {
-    position: "absolute", top: -3, insetInlineEnd: -6,
-    backgroundColor: colors.danger, borderRadius: 8, minWidth: 16, height: 16,
-    alignItems: "center", justifyContent: "center", paddingHorizontal: 4,
+  bar: {
+    flexDirection: "row",
+    alignItems: "flex-end",
+    backgroundColor: "#0D0E15",
+    borderTopWidth: 1,
+    borderTopColor: "rgba(139,92,246,0.22)",
+    paddingTop: 7,
+    paddingHorizontal: 4,
+    elevation: 22,
   },
-  badgeText: { color: "#fff", fontSize: 9, fontWeight: "900" },
+  col: { flex: 1, alignItems: "center", justifyContent: "flex-end", gap: 3, minWidth: 0, paddingVertical: 2 },
+  pill: { width: 46, height: 30, borderRadius: 12, alignItems: "center", justifyContent: "center" },
+  pillActive: { backgroundColor: "rgba(91,103,241,0.20)" },
+  glyph: { fontSize: 20 },
+  label: { fontSize: 10, fontWeight: "800", letterSpacing: 0.2 },
   createBtn: {
-    width: 52, height: 36, borderRadius: 13,
-    backgroundColor: colors.primary,
-    alignItems: "center", justifyContent: "center",
-    shadowColor: colors.primary, shadowOpacity: 0.5, shadowRadius: 10, shadowOffset: { width: 0, height: 4 },
+    width: 52, height: 34, borderRadius: 12, backgroundColor: colors.primary,
+    alignItems: "center", justifyContent: "center", marginBottom: 12,
+    shadowColor: colors.primary, shadowOpacity: 0.55, shadowRadius: 12, shadowOffset: { width: 0, height: 5 },
   },
+  plus: { color: "#fff", fontSize: 24, fontWeight: "300", marginTop: -2 },
 });

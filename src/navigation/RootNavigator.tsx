@@ -10,6 +10,7 @@ import {
   SplashScreen, OnboardingScreen, OtpScreen, OutroScreen,
   StoryViewerScreen, ChatRoomScreen, AudioCallScreen, VideoCallScreen,
   LiveStreamScreen, EditProfileScreen, WalletScreen, AdminScreen,
+  FollowListScreen, LiveListScreen,
 } from "../screens";
 
 export type RootParams = {
@@ -20,6 +21,8 @@ export type RootParams = {
   AudioCall: { name: string } | undefined;
   VideoCall: { name: string } | undefined;
   LiveStream: { streamId?: string } | undefined;
+  LiveList: undefined;
+  FollowList: { userId: string; kind: "followers" | "following"; title?: string };
   EditProfile: undefined; Wallet: undefined; Admin: undefined;
 };
 
@@ -58,6 +61,8 @@ export function RootNavigator() {
         <Stack.Screen name="AudioCall" component={AudioCallScreen} />
         <Stack.Screen name="VideoCall" component={VideoCallScreen} />
         <Stack.Screen name="LiveStream" component={LiveStreamScreen} />
+        <Stack.Screen name="LiveList" component={LiveListScreen} />
+        <Stack.Screen name="FollowList" component={FollowListScreen} />
         <Stack.Screen name="EditProfile" component={EditProfileScreen} />
         <Stack.Screen name="Wallet" component={WalletScreen} />
         <Stack.Screen name="Admin" component={AdminScreen} />

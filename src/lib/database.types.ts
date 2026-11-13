@@ -147,3 +147,51 @@ export interface Report {
   status: "open" | "resolved" | "rejected";
   created_at: string;
 }
+
+/* ===== v1.4 — أنواع RPC الجديدة ===== */
+export interface ConversationRow {
+  id: string;
+  is_group: boolean;
+  title: string | null;
+  last_message: string | null;
+  updated_at: string;
+  other_id: string | null;
+  other_name: string | null;
+  other_username: string | null;
+  other_avatar: string | null;
+  member_count: number;
+  unread: number;
+}
+
+export interface FollowUser {
+  id: string;
+  username: string;
+  full_name: string | null;
+  avatar_url: string | null;
+  is_verified: boolean;
+  is_private: boolean;
+  is_following: boolean;
+  is_follower: boolean;
+}
+
+export interface LiveRow {
+  id: string;
+  title: string;
+  viewer_count: number;
+  coin_count: number;
+  created_at: string;
+  playback_url: string | null;
+  host_id: string;
+  host_name: string | null;
+  host_username: string | null;
+  host_avatar: string | null;
+}
+
+export interface CommentRow {
+  id: string;
+  post_id: string;
+  user_id: string;
+  content: string;
+  created_at: string;
+  profiles?: Profile;
+}

@@ -21,3 +21,5 @@ export { NotificationsScreen } from "./NotificationsScreen";
 export { CreatePostScreen } from "./CreatePostScreen";
 export { SettingsScreen } from "./SettingsScreen";
 export { AdminScreen } from "./AdminScreen";
+export { FollowListScreen } from "./FollowListScreen";
+export { LiveListScreen } from "./LiveListScreen";
